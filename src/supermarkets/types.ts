@@ -38,6 +38,16 @@ export interface PriceProvider {
   readonly id: string;
   /** Anzeigename für die UI. */
   readonly displayName: string;
+  /**
+   * Liefert dieser Anbieter derzeit Daten?
+   *
+   * Ein Markt, dessen Schnittstelle zu ist, verschwindet nicht aus der App —
+   * er wird sichtbar als nicht verfügbar angezeigt. Ein ausgegrauter Eintrag
+   * mit Begründung ist ehrlicher als eine Auswahl, die stumm ins Leere läuft.
+   */
+  readonly available: boolean;
+  /** Warum nicht verfügbar — wird dem Nutzer im Klartext gezeigt. */
+  readonly unavailableReason?: string;
 
   /** Volltextsuche im Sortiment. */
   searchProducts(query: string, options?: SearchOptions): Promise<SearchResult>;

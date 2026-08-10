@@ -85,6 +85,8 @@ export interface ShoppingListItem {
   lineTotal: number;
   /** Kein Produkt gefunden – Nutzer muss selbst zuordnen. */
   needsManualMatch: boolean;
+  /** Warum diese Zeile Aufmerksamkeit braucht, in Klartext für die UI. */
+  note?: string;
   checked: boolean;
 }
 

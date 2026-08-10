@@ -9,9 +9,51 @@ Gesamtpreis des Einkaufs.
 
 ## Stand
 
-**Sprint 0 abgeschlossen** — Durchstich steht: Die App erreicht über den
-`PriceProvider` echte Albert-Heijn-Preise. Rezept-Parsing, Zutaten-
-Normalisierung und Einkaufsliste kommen in Sprint 3–8.
+Der komplette Ablauf funktioniert Ende zu Ende:
+
+**Rezepte** (anlegen, bearbeiten, mehrere auswählen) → **Supermarkt wählen**
+→ **Einkaufsliste** mit Mengen, Packungen und Gesamtpreis, gruppiert nach
+Ladenabteilung.
+
+Rezepte werden derzeit von Hand eingetragen. Der Import aus Text, Link und
+Foto über die Claude API folgt in Sprint 3–5.
+
+## Ablauf
+
+| Schritt | Screen | Was passiert |
+|---|---|---|
+| 1 | `RecipeListScreen` | Rezepte anlegen und auswählen. Mehrfachauswahl ist Absicht — eine Wochenplanung besteht aus mehreren Rezepten |
+| 2 | `SupermarketScreen` | Albert Heijn oder Jumbo. Nicht verfügbare Märkte werden mit Begründung angezeigt, nicht versteckt |
+| 3 | `ShoppingListScreen` | Zutaten zusammenfassen, Produkte suchen, Packungen berechnen, Preise summieren |
+
+## Wie gut trifft die Produktzuordnung?
+
+Ehrliche Antwort: **brauchbar, aber nicht gut genug.** Die Zuordnung läuft
+über ein handgepflegtes DE→NL-Wörterbuch plus eine Relevanzheuristik.
+
+Rein auf den Preis zu optimieren scheitert sofort. Die Suche nach `eieren`
+liefert flüssiges Eiweiß und Erdbeeren, `tomaten` liefert Ketchup und
+Passata — alles billiger als das gemeinte Produkt. AHs eigene
+Trefferreihenfolge hilft nicht: Sie setzt Ketchup auf Platz 2 von `tomaten`
+und Erdbeeren auf Platz 5 von `eieren`.
+
+Die Heuristik verlangt deshalb, dass der Suchbegriff im Produkttitel
+vorkommt, und bevorzugt den Titel mit den wenigsten Zusatzwörtern —
+`AH Tomaten` schlägt `AH Tomaten passata gezeefd`. Erst danach entscheidet
+der Preis.
+
+Was das nicht kann, und zwar prinzipiell nicht:
+
+- **Mengen gegen Gebinde denken.** „3 Eier" trifft auf ein 3er-Pack à 10 Stück.
+  Eine Wortzählung erkennt das nicht.
+- **Gleichwertige Varianten erkennen.** `AH Patent tarwebloem` (500 g, 0,55 €)
+  ist genauso richtig wie `AH Tarwebloem` (1 kg, 0,85 €), wird aber wegen
+  eines Zusatzworts aussortiert — die Liste wird unnötig teurer.
+- **Unbekannte Zutaten.** Was nicht im Wörterbuch steht, geht unübersetzt in
+  die Suche.
+
+Die belastbare Lösung ist die semantische Zuordnung über die Claude API in
+Sprint 6/7. Die Heuristik ist explizit eine Brücke bis dahin.
 
 ## Setup
 
@@ -64,15 +106,24 @@ beschränkt.
 
 ```
 src/
-  domain/           Reine Logik — kein Netzwerk, keine UI, voll testbar
-    units.ts        Einheiten (g, ml, EL, TL, Prise, Bund …) und Umrechnung
-    types.ts        Ingredient, Recipe, Product, ShoppingList
+  domain/             Reine Logik — kein Netzwerk, keine UI, voll testbar
+    units.ts          Einheiten (g, ml, EL, TL, Prise, Bund …) und Umrechnung
+    types.ts          Ingredient, Recipe, Product, ShoppingList
+    translate.ts      DE→NL-Zutatenwörterbuch, Vorratsware-Erkennung
+    shoppingList.ts   Zutaten zusammenfassen, Produkte wählen, Preise rechnen
   supermarkets/
-    types.ts        PriceProvider-Interface — die Abstraktion über Datenquellen
-    albertHeijn.ts  Albert-Heijn-Anbindung
+    types.ts          PriceProvider-Interface — Abstraktion über Datenquellen
+    albertHeijn.ts    Albert-Heijn-Anbindung
+    jumbo.ts          Jumbo — derzeit nicht verfügbar, dokumentiert warum
+    registry.ts       Verzeichnis der Anbieter
+  storage/
+    recipeStore.ts    Rezepte speichern (AsyncStorage: Browser + Gerät)
+  screens/            Die vier Schritte des Ablaufs
+  ui/                 Theme und wiederverwendete Bausteine
 scripts/
-  smoke-ah.ts       Smoke-Test der Datenquelle
-App.tsx             Sprint-0-Durchstich: Produktsuche mit echten Preisen
+  smoke-ah.ts         Datenquelle testen
+  smoke-list.ts       Einkaufslisten-Logik gegen echte Daten testen
+App.tsx               Navigation
 ```
 
 ## Datenquellen
@@ -112,13 +163,13 @@ Klassentausch, kein Umbau der App.
 | Sprint | Inhalt | Status |
 |---|---|---|
 | 0 | Projektgerüst, AH-Durchstich | ✅ |
-| 1 | Domänenkern: Einheiten, Typen, Tests | teilweise |
-| 2 | UI-Skelett mit Mock-Daten | offen |
+| 1 | Domänenkern: Einheiten, Typen | ✅ (Tests fehlen noch) |
+| 2 | Screens: Rezepte, Supermarkt, Einkaufsliste | ✅ |
 | 3 | Rezept-Parsing (Text) via Claude API | offen |
 | 4 | Import per Link (schema.org/Recipe JSON-LD) | offen |
 | 5 | Import per Foto (Claude Vision) | offen |
-| 6 | Zutaten-Normalisierung + DE→NL-Abbildung | offen |
-| 7 | Produkt-Matching, Packungsgrößen, Preise | offen |
-| 8 | Einkaufsliste, sortiert nach Ladenabteilung | offen |
-| 9 | Persistenz (expo-sqlite) | offen |
+| 6 | Zutaten-Normalisierung per LLM statt Wörterbuch | offen |
+| 7 | Produkt-Matching per LLM statt Wortzählung | offen |
+| 8 | Einkaufsliste verfeinern (Produkt tauschen, Mengen anpassen) | ✅ Grundlage steht |
+| 9 | Persistenz | ✅ (AsyncStorage; SQLite bei Bedarf) |
 | 10 | Build, Release | offen |

@@ -115,6 +115,7 @@ export function parsePackageSize(raw: string | undefined): Quantity | undefined 
 export class AlbertHeijnProvider implements PriceProvider {
   readonly id = 'albert-heijn';
   readonly displayName = 'Albert Heijn';
+  readonly available = true;
 
   private token: string | null = null;
   private tokenExpiresAt = 0;
