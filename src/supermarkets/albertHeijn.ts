@@ -38,6 +38,30 @@ const HEADERS = {
   Accept: 'application/json',
 } as const;
 
+interface AhImage {
+  width: number;
+  height: number;
+  url: string;
+}
+
+/**
+ * Wählt aus AHs Bildliste die passende Größe.
+ *
+ * Die Liste ist **nicht** nach Größe sortiert — sie kommt in der Reihenfolge
+ * 800, 400, 200, 48, 80. Einfach das erste oder letzte Element zu nehmen
+ * liefert deshalb ein Vorschaubild von 80 Pixeln, das auf einer Kachel zu
+ * Matsch wird.
+ *
+ * Gewählt wird das kleinste Bild, das noch groß genug ist: scharf genug für
+ * die Anzeige, ohne unnötig Daten zu laden. Gibt es keins, das reicht,
+ * gewinnt das größte verfügbare.
+ */
+export function pickImageUrl(images: AhImage[] | undefined, minWidth: number): string | undefined {
+  if (!images?.length) return undefined;
+  const bySize = [...images].sort((a, b) => a.width - b.width);
+  return (bySize.find((img) => img.width >= minWidth) ?? bySize[bySize.length - 1]).url;
+}
+
 /** Rohform eines Produkts, wie AH es liefert (nur die genutzten Felder). */
 interface AhProduct {
   webshopId: number;
@@ -251,7 +275,8 @@ export class AlbertHeijnProvider implements PriceProvider {
       id: String(c.id),
       name: c.name,
       slug: c.slugifiedName,
-      imageUrl: c.images?.at(-1)?.url,
+      // Abteilungskacheln sind mehrere hundert Pixel breit.
+      imageUrl: pickImageUrl(c.images, 400),
     };
   }
 
@@ -277,8 +302,9 @@ export class AlbertHeijnProvider implements PriceProvider {
       packageQuantity: parsePackageSize(p.salesUnitSize),
       unitPriceDescription: p.unitPriceDescription,
       category: p.mainCategory,
-      // Das größte gelieferte Bild ist für Produktkacheln völlig ausreichend.
-      imageUrl: p.images?.at(-1)?.url,
+      // 200 px reicht für ein Vorschaubild von 52 px auch auf einem
+      // hochauflösenden Bildschirm.
+      imageUrl: pickImageUrl(p.images, 200),
       isOnSale: onSale,
       isAvailable: p.isOrderable !== false,
     };

@@ -208,7 +208,10 @@ export function ProductSearchScreen({ providerId, initialQuery = '', onPick, onC
               style={({ pressed }) => [s.tile, pressed && s.tilePressed]}
             >
               {item.imageUrl ? (
-                <Image source={{ uri: item.imageUrl }} style={s.tileImg} resizeMode="cover" />
+                // "contain" statt "cover": Die Unterabteilungen nutzen
+                // quadratische Produktfotos mit Beschriftung. Beschnitten
+                // auf ein flaches Band schneidet das den Text ab.
+                <Image source={{ uri: item.imageUrl }} style={s.tileImg} resizeMode="contain" />
               ) : (
                 <View style={[s.tileImg, s.tileImgEmpty]} />
               )}
@@ -303,8 +306,8 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
   tilePressed: { borderColor: colors.primary },
-  tileImg: { width: '100%', height: 84, backgroundColor: '#f0f0ee' },
-  tileImgEmpty: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  tileImg: { width: '100%', height: 128, backgroundColor: colors.surface },
+  tileImgEmpty: { backgroundColor: '#f0f0ee', borderBottomWidth: 1, borderBottomColor: colors.border },
   tileText: {
     fontSize: 13,
     fontWeight: '600',

@@ -8,13 +8,39 @@
  * dieser Test fehl, bevor du im Simulator suchst.
  */
 
-import { AlbertHeijnProvider, parsePackageSize } from '../src/supermarkets/albertHeijn';
+import { AlbertHeijnProvider, parsePackageSize, pickImageUrl } from '../src/supermarkets/albertHeijn';
 
 const euro = (v: number) => `€${v.toFixed(2)}`;
 
 async function main() {
   const ah = new AlbertHeijnProvider();
   let failures = 0;
+
+  // 0. Bildauswahl — reine Logik
+  // AHs Bildliste ist NICHT nach Größe sortiert: 800, 400, 200, 48, 80.
+  // Das letzte Element zu nehmen liefert 80 px und damit ein unscharfes Bild.
+  console.log('\n── Bildauswahl (AH-Reihenfolge: 800, 400, 200, 48, 80) ──');
+  const images = [800, 400, 200, 48, 80].map((n) => ({
+    width: n,
+    height: n,
+    url: String(n),
+  }));
+  const imageCases: [number, string][] = [
+    [400, '400'],
+    [200, '200'],
+    [600, '800'],
+    [1200, '800'], // nichts groß genug → größtes verfügbares
+    [40, '48'],
+  ];
+  for (const [minWidth, expected] of imageCases) {
+    const actual = pickImageUrl(images, minWidth);
+    const ok = actual === expected;
+    if (!ok) failures++;
+    console.log(`  ${ok ? '✓' : '✗'} minWidth=${String(minWidth).padStart(4)} → ${actual} px`);
+  }
+  const emptyOk = pickImageUrl(undefined, 400) === undefined;
+  if (!emptyOk) failures++;
+  console.log(`  ${emptyOk ? '✓' : '✗'} keine Bilder → undefined`);
 
   // 1. Gebindegrößen-Parser — reine Logik, kein Netz
   console.log('\n── Gebindegrößen-Parser ──');
