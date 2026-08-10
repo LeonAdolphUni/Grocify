@@ -225,10 +225,30 @@ export async function buildShoppingList(
 
     let item: ShoppingListItem;
     try {
-      const { products } = await provider.searchProducts(searchTerm, {
-        size: candidatesPerIngredient,
-      });
-      const best = chooseBestProduct(products, required, searchTerm);
+      // Hat der Nutzer beim Anlegen ein Produkt gewählt und passt der
+      // Supermarkt, ist jede Suche überflüssig — das ist die zuverlässigste
+      // Zuordnung, die es gibt. Nur der Preis wird frisch geholt.
+      const pin =
+        ing.pinnedProduct && ing.pinnedProduct.provider === provider.id
+          ? ing.pinnedProduct
+          : undefined;
+
+      let best = null as ReturnType<typeof chooseBestProduct>;
+      let pinMissing = false;
+
+      if (pin) {
+        const exact = await provider.getProductById(pin.id);
+        if (exact) best = chooseBestProduct([exact], required);
+        // null heißt ausgelistet — dann unten normal weitersuchen.
+        else pinMissing = true;
+      }
+
+      if (!best) {
+        const { products } = await provider.searchProducts(searchTerm, {
+          size: candidatesPerIngredient,
+        });
+        best = chooseBestProduct(products, required, searchTerm);
+      }
 
       if (!best) {
         item = {
@@ -249,9 +269,11 @@ export async function buildShoppingList(
           packagesToBuy: best.packages,
           lineTotal: best.total,
           needsManualMatch: false,
-          note: required
-            ? undefined
-            : `Menge „${ing.quantity.unit}" ist ohne Zutatenwissen nicht umrechenbar — eine Packung angenommen`,
+          note: pinMissing
+            ? `Dein gewähltes Produkt „${pin?.title}" gibt es nicht mehr — Ersatz automatisch gesucht`
+            : required
+              ? undefined
+              : `Menge „${ing.quantity.unit}" ist ohne Zutatenwissen nicht umrechenbar — eine Packung angenommen`,
           checked: false,
         };
       }

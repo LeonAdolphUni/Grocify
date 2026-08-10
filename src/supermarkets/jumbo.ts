@@ -40,6 +40,10 @@ export class JumboProvider implements PriceProvider {
     throw new ProviderError(REASON, this.id, 403);
   }
 
+  async getProductById(): Promise<null> {
+    throw new ProviderError(REASON, this.id, 403);
+  }
+
   async getCategories(): Promise<Category[]> {
     throw new ProviderError(REASON, this.id, 403);
   }

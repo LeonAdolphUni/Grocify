@@ -7,6 +7,25 @@
 import type { Quantity } from './units';
 
 /**
+ * Ein vom Nutzer beim Anlegen fest gewähltes Produkt.
+ *
+ * Bewusst nur eine Notiz, kein Ersatz für die Zutat: Das Rezept bleibt über
+ * Name und Menge definiert und damit auf andere Supermärkte übertragbar.
+ * Ein Rezept, das nur aus Artikelnummern besteht, wäre beim Marktwechsel
+ * wertlos — und die späteren Text- und Foto-Importe liefern ohnehin Namen.
+ *
+ * `title` und `packageSize` sind eine Kopie für die Anzeige, damit die
+ * Zutatenliste auch ohne Netz etwas zeigen kann. Der Preis wird bewusst
+ * NICHT mitgespeichert: Er wird beim Bauen der Einkaufsliste frisch geholt.
+ */
+export interface PinnedProduct {
+  provider: string;
+  id: string;
+  title: string;
+  packageSize: string;
+}
+
+/**
  * Eine Zutat, wie sie im Rezept steht, plus die kanonische Zuordnung.
  *
  * `rawText` ist immer das Original aus dem Rezept. Das behalten wir, damit
@@ -27,6 +46,12 @@ export interface Ingredient {
   rawText: string;
   /** Vorratsware (Salz, Pfeffer, Öl): standardmäßig nicht auf der Einkaufsliste. */
   isPantryStaple: boolean;
+  /**
+   * Vom Nutzer beim Anlegen gewähltes Produkt. Ist es gesetzt und passt der
+   * Supermarkt, wird nicht gesucht, sondern genau dieses Produkt genommen —
+   * die zuverlässigste Zuordnung, die es gibt.
+   */
+  pinnedProduct?: PinnedProduct;
 }
 
 export interface Recipe {

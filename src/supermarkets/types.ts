@@ -53,6 +53,16 @@ export interface PriceProvider {
   searchProducts(query: string, options?: SearchOptions): Promise<SearchResult>;
 
   /**
+   * Ein einzelnes Produkt über seine Anbieter-ID laden.
+   *
+   * Wird für vom Nutzer fest gewählte Produkte gebraucht: Die ID steht im
+   * Rezept, der Preis muss beim Bauen der Liste frisch geholt werden.
+   * Gibt `null` zurück, wenn es das Produkt nicht mehr gibt — ausgelistete
+   * Artikel sind ein Normalfall, kein Fehler.
+   */
+  getProductById(id: string): Promise<Product | null>;
+
+  /**
    * Abteilungsstruktur des Marktes.
    * Wird genutzt, um die Einkaufsliste nach Laufweg im Laden zu sortieren.
    */

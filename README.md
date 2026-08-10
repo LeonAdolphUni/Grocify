@@ -23,13 +23,36 @@ Foto über die Claude API folgt in Sprint 3–5.
 | Schritt | Screen | Was passiert |
 |---|---|---|
 | 1 | `RecipeListScreen` | Rezepte anlegen und auswählen. Mehrfachauswahl ist Absicht — eine Wochenplanung besteht aus mehreren Rezepten |
+| 1a | `ProductSearchScreen` | Beim Anlegen: echtes Produkt aus dem Sortiment wählen statt frei zu tippen |
 | 2 | `SupermarketScreen` | Albert Heijn oder Jumbo. Nicht verfügbare Märkte werden mit Begründung angezeigt, nicht versteckt |
 | 3 | `ShoppingListScreen` | Zutaten zusammenfassen, Produkte suchen, Packungen berechnen, Preise summieren |
 
-## Wie gut trifft die Produktzuordnung?
+## Produkt beim Anlegen selbst wählen
 
-Ehrliche Antwort: **brauchbar, aber nicht gut genug.** Die Zuordnung läuft
-über ein handgepflegtes DE→NL-Wörterbuch plus eine Relevanzheuristik.
+Der zuverlässigste Weg: In der Zutatenzeile **„Produkt aus dem Sortiment
+wählen"** antippen, suchen, Produkt antippen. Die Zutat merkt sich dann
+Anbieter und Artikel-ID. Beim Bauen der Einkaufsliste wird für diese Zutat
+weder übersetzt noch gesucht — nur der Preis frisch geholt.
+
+Das Rezept bleibt trotzdem über Name und Menge definiert, das gewählte
+Produkt ist nur eine Notiz dazu. Ein Rezept aus reinen Artikelnummern wäre
+beim Supermarktwechsel wertlos, und die späteren Text- und Foto-Importe
+liefern ohnehin Namen. Fällt ein Artikel aus dem Sortiment, sucht die App
+automatisch Ersatz und vermerkt das in der Zeile.
+
+Was das bringt, am Beispiel Spaghetti Bolognese:
+
+| Zutat | automatisch | fest gewählt |
+|---|---|---|
+| Hackfleisch | 2 × 300 g — 8,50 € | 1 × 500 g — 4,59 € |
+| Parmesan | ca. 145 g — 6,59 € | 150 g — 5,19 € |
+| **Gesamt** | **21,95 €** | **16,64 €** |
+
+## Wie gut trifft die automatische Zuordnung?
+
+Für alles, was *nicht* fest gewählt wurde, greift die Heuristik. Ehrliche
+Antwort dazu: **brauchbar, aber nicht gut genug.** Sie läuft über ein
+handgepflegtes DE→NL-Wörterbuch plus eine Relevanzprüfung.
 
 Rein auf den Preis zu optimieren scheitert sofort. Die Suche nach `eieren`
 liefert flüssiges Eiweiß und Erdbeeren, `tomaten` liefert Ketchup und

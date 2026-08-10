@@ -24,3 +24,13 @@ export function getProvider(id: string): PriceProvider | undefined {
 }
 
 export const DEFAULT_PROVIDER_ID = 'albert-heijn';
+
+/**
+ * Markt, in dem beim Anlegen eines Rezepts gesucht wird.
+ *
+ * Der Einkaufsmarkt wird erst später gewählt, gesucht werden muss aber
+ * schon vorher. Solange nur ein Anbieter Daten liefert, ist die Wahl
+ * eindeutig.
+ */
+export const SEARCH_PROVIDER_ID =
+  PROVIDERS.find((p) => p.available)?.id ?? DEFAULT_PROVIDER_ID;

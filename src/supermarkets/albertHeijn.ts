@@ -191,6 +191,20 @@ export class AlbertHeijnProvider implements PriceProvider {
     };
   }
 
+  async getProductById(id: string): Promise<Product | null> {
+    try {
+      const data = (await this.authedFetch(`/mobile-services/product/detail/v4/fir/${id}`)) as {
+        productCard?: AhProduct;
+      };
+      return data.productCard ? this.toProduct(data.productCard) : null;
+    } catch (err) {
+      // 404 heißt: ausgelistet. Das ist ein Normalfall — der Aufrufer fällt
+      // dann auf die normale Suche zurück. Alles andere wird durchgereicht.
+      if (err instanceof ProviderError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
   async getCategories(): Promise<Category[]> {
     const data = (await this.authedFetch(
       '/mobile-services/v1/product-shelves/categories',
