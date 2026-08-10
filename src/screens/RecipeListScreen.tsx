@@ -20,6 +20,7 @@ interface Props {
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onContinue: () => void;
+  onLoadDemo: () => void;
 }
 
 export function RecipeListScreen({
@@ -30,6 +31,7 @@ export function RecipeListScreen({
   onEdit,
   onDelete,
   onContinue,
+  onLoadDemo,
 }: Props) {
   const selectedCount = selectedIds.length;
 
@@ -56,6 +58,18 @@ export function RecipeListScreen({
               Titel, Portionen und Zutaten eintragen — daraus wird gleich eine
               Einkaufsliste mit echten Preisen.
             </Text>
+
+            <View style={s.emptyAction}>
+              <Button
+                label="Beispielrezept laden"
+                variant="secondary"
+                onPress={onLoadDemo}
+              />
+              <Text style={s.emptyHint}>
+                Spaghetti Bolognese, 11 Zutaten — zum Ausprobieren, jederzeit
+                wieder löschbar.
+              </Text>
+            </View>
           </View>
         }
         renderItem={({ item }) => {
@@ -126,6 +140,8 @@ const s = StyleSheet.create({
   empty: { alignItems: 'center', paddingTop: 72, paddingHorizontal: spacing.xxl },
   emptyTitle: { fontSize: 17, fontWeight: '600', color: colors.text, marginBottom: spacing.sm },
   emptyText: { fontSize: 14, color: colors.textFaint, textAlign: 'center', lineHeight: 21 },
+  emptyAction: { marginTop: spacing.xxl, alignSelf: 'stretch', gap: spacing.sm },
+  emptyHint: { fontSize: 12, color: colors.textFaint, textAlign: 'center', lineHeight: 17 },
   footer: {
     padding: spacing.lg,
     borderTopWidth: 1,

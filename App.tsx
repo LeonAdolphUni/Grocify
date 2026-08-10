@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
+import { createDemoRecipe } from './src/domain/demoRecipe';
 import type { Recipe } from './src/domain/types';
 import { RecipeEditScreen } from './src/screens/RecipeEditScreen';
 import { RecipeListScreen } from './src/screens/RecipeListScreen';
@@ -22,6 +23,7 @@ import { SupermarketScreen } from './src/screens/SupermarketScreen';
 import {
   deleteRecipe,
   loadRecipes,
+  newId,
   upsertRecipe,
 } from './src/storage/recipeStore';
 import { colors } from './src/ui/theme';
@@ -64,6 +66,13 @@ export default function App() {
     setSelectedIds((ids) => ids.filter((x) => x !== id));
   }, []);
 
+  /** Legt das Beispielrezept an und wählt es gleich aus. */
+  const handleLoadDemo = useCallback(async () => {
+    const demo = createDemoRecipe(newId());
+    setRecipes(await upsertRecipe(demo));
+    setSelectedIds([demo.id]);
+  }, []);
+
   if (!ready) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center' }}>
@@ -85,6 +94,7 @@ export default function App() {
           onEdit={(recipeId) => setRoute({ name: 'edit', recipeId })}
           onDelete={handleDelete}
           onContinue={() => setRoute({ name: 'supermarket' })}
+          onLoadDemo={handleLoadDemo}
         />
       )}
 
