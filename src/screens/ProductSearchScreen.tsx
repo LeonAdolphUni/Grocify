@@ -1,12 +1,16 @@
 /**
- * Produktsuche im Supermarkt-Sortiment.
+ * Produkte finden — durch Stöbern oder durch Suchen.
  *
- * Wird beim Anlegen eines Rezepts geöffnet: Der Nutzer sucht das echte
- * Produkt und wählt es aus. Damit entfällt für diese Zutat jede
- * Übersetzung und jedes Raten — die Zuordnung steht fest.
+ * Der Einstieg sind die Abteilungen des Marktes, nicht ein leeres
+ * Suchfeld: Wer ein Rezept anlegt, weiß oft „irgendwas mit Gemüse", aber
+ * nicht, dass Zwiebeln auf Niederländisch „ui" heißen. Gesucht werden kann
+ * jederzeit zusätzlich.
+ *
+ * Drei Ebenen: Abteilung → Unterabteilung → Produkte. Die Suche ist ein
+ * eigener Zweig, der jede Ebene überspringt.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -20,94 +24,203 @@ import {
 
 import type { Product } from '../domain/types';
 import { getProvider } from '../supermarkets/registry';
-import { ProviderError } from '../supermarkets/types';
+import { ProviderError, type Category } from '../supermarkets/types';
 import { Header, Screen } from '../ui/components';
 import { colors, euro, radius, spacing } from '../ui/theme';
 
+/** Wo im Bildschirm wir gerade sind. */
+type Level =
+  | { kind: 'departments' }
+  | { kind: 'sub'; parent: Category }
+  /** `parent` merkt sich, wohin „Zurück" führt. */
+  | { kind: 'products'; category: Category; parent?: Category }
+  | { kind: 'search'; query: string };
+
 interface Props {
   providerId: string;
-  /** Vorbelegung des Suchfelds, meist der bereits getippte Zutatenname. */
   initialQuery?: string;
   onPick: (product: Product) => void;
   onCancel: () => void;
 }
 
 export function ProductSearchScreen({ providerId, initialQuery = '', onPick, onCancel }: Props) {
-  const [query, setQuery] = useState(initialQuery);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [total, setTotal] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   const provider = getProvider(providerId);
 
-  const search = useCallback(async () => {
-    const term = query.trim();
-    if (!term || !provider) return;
+  const [query, setQuery] = useState(initialQuery);
+  // Wurde der Zutatenname schon getippt, ist die Suche danach der schnellste
+  // Weg. Ohne Vorgabe steigt man bei den Abteilungen ein.
+  const [view, setView] = useState<Level>(
+    initialQuery.trim()
+      ? { kind: 'search', query: initialQuery.trim() }
+      : { kind: 'departments' },
+  );
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  /** Lädt, was die aktuelle Ebene braucht. */
+  useEffect(() => {
+    if (!provider) {
+      setError(`Unbekannter Supermarkt: ${providerId}`);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    try {
-      const result = await provider.searchProducts(term, { size: 25 });
-      setProducts(result.products);
-      setTotal(result.totalResults);
-    } catch (err) {
-      setProducts([]);
-      setTotal(null);
-      setError(
-        err instanceof ProviderError
-          ? err.message
-          : `Suche fehlgeschlagen: ${(err as Error).message}`,
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [provider, query]);
+
+    (async () => {
+      try {
+        if (view.kind === 'departments') {
+          const cats = await provider.getCategories();
+          if (!cancelled) {
+            setCategories(cats);
+            setProducts([]);
+            setTotal(null);
+          }
+        } else if (view.kind === 'sub') {
+          const subs = await provider.getSubCategories(view.parent.id);
+          if (!cancelled) {
+            setCategories(subs);
+            setProducts([]);
+            setTotal(null);
+          }
+        } else if (view.kind === 'products') {
+          const result = await provider.browseCategory(view.category.id, { size: 40 });
+          if (!cancelled) {
+            setProducts(result.products);
+            setTotal(result.totalResults);
+            setCategories([]);
+          }
+        } else {
+          const result = await provider.searchProducts(view.query, { size: 40 });
+          if (!cancelled) {
+            setProducts(result.products);
+            setTotal(result.totalResults);
+            setCategories([]);
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setProducts([]);
+          setCategories([]);
+          setError(
+            err instanceof ProviderError ? err.message : `Fehler: ${(err as Error).message}`,
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, providerId, view]);
+
+  const runSearch = useCallback(() => {
+    const term = query.trim();
+    if (term) setView({ kind: 'search', query: term });
+  }, [query]);
+
+  /** Eine Ebene zurück — oder raus, wenn wir schon ganz oben sind. */
+  const goBack = () => {
+    if (view.kind === 'departments') return onCancel();
+    if (view.kind === 'products' && view.parent) return setView({ kind: 'sub', parent: view.parent });
+    setView({ kind: 'departments' });
+  };
+
+  const subtitle =
+    view.kind === 'departments'
+      ? `${provider?.displayName ?? providerId} · Abteilung wählen`
+      : view.kind === 'sub'
+        ? view.parent.name
+        : view.kind === 'products'
+          ? `${view.category.name}${total !== null ? ` · ${total.toLocaleString('de-DE')} Produkte` : ''}`
+          : `Suche „${view.query}"${total !== null ? ` · ${total.toLocaleString('de-DE')} Treffer` : ''}`;
 
   return (
     <Screen>
-      <Header
-        title="Produkt suchen"
-        subtitle={provider?.displayName ?? providerId}
-        onBack={onCancel}
-      />
+      <Header title="Produkt wählen" subtitle={subtitle} onBack={goBack} />
 
       <View style={s.searchBar}>
         <TextInput
           style={s.input}
           value={query}
           onChangeText={setQuery}
-          onSubmitEditing={search}
-          placeholder="z. B. tarwebloem, melk, gehakt"
+          onSubmitEditing={runSearch}
+          placeholder="Suchen, z. B. tarwebloem"
           autoCapitalize="none"
           autoCorrect={false}
-          autoFocus
           returnKeyType="search"
         />
         <Pressable
           style={({ pressed }) => [s.btn, pressed && s.btnPressed]}
-          onPress={search}
+          onPress={runSearch}
         >
           <Text style={s.btnText}>Suchen</Text>
         </Pressable>
       </View>
 
-      <Text style={s.hint}>
-        Suchbegriffe sind niederländisch — so heißen die Produkte im Regal.
-      </Text>
+      {view.kind !== 'departments' ? (
+        <Pressable onPress={() => setView({ kind: 'departments' })} style={s.crumb}>
+          <Text style={s.crumbText}>← Alle Abteilungen</Text>
+        </Pressable>
+      ) : null}
 
       {error ? <Text style={s.error}>{error}</Text> : null}
 
-      {total !== null && !loading ? (
-        <Text style={s.count}>
-          {total.toLocaleString('de-DE')} Treffer — die ersten {products.length}
-        </Text>
-      ) : null}
-
       {loading ? (
         <ActivityIndicator style={s.loader} size="large" />
+      ) : categories.length > 0 ? (
+        <FlatList
+          key="cats"
+          data={categories}
+          keyExtractor={(c) => c.id}
+          numColumns={2}
+          columnWrapperStyle={s.gridRow}
+          contentContainerStyle={s.grid}
+          keyboardShouldPersistTaps="handled"
+          ListHeaderComponent={
+            view.kind === 'sub' ? (
+              <Pressable
+                onPress={() => setView({ kind: 'products', category: view.parent })}
+                style={({ pressed }) => [s.allBtn, pressed && s.tilePressed]}
+              >
+                <Text style={s.allBtnText}>Alles aus „{view.parent.name}" zeigen</Text>
+              </Pressable>
+            ) : null
+          }
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() =>
+                view.kind === 'departments'
+                  ? setView({ kind: 'sub', parent: item })
+                  : setView({
+                      kind: 'products',
+                      category: item,
+                      parent: view.kind === 'sub' ? view.parent : undefined,
+                    })
+              }
+              style={({ pressed }) => [s.tile, pressed && s.tilePressed]}
+            >
+              {item.imageUrl ? (
+                <Image source={{ uri: item.imageUrl }} style={s.tileImg} resizeMode="cover" />
+              ) : (
+                <View style={[s.tileImg, s.tileImgEmpty]} />
+              )}
+              <Text style={s.tileText} numberOfLines={2}>
+                {item.name}
+              </Text>
+            </Pressable>
+          )}
+        />
       ) : (
         <FlatList
+          key="prods"
           data={products}
           keyExtractor={(p) => p.id}
           contentContainerStyle={s.list}
@@ -145,12 +258,7 @@ export function ProductSearchScreen({ providerId, initialQuery = '', onPick, onC
             </Pressable>
           )}
           ListEmptyComponent={
-            error ? null : (
-              <Text style={s.empty}>
-                Tippe einen Suchbegriff ein und wähle das Produkt, das du
-                tatsächlich kaufen würdest.
-              </Text>
-            )
+            error ? null : <Text style={s.empty}>Keine Produkte gefunden.</Text>
           }
         />
       )}
@@ -178,14 +286,43 @@ const s = StyleSheet.create({
   },
   btnPressed: { opacity: 0.75 },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
-  hint: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.sm,
-    fontSize: 12,
-    color: colors.textFaint,
-  },
-  count: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, fontSize: 13, color: colors.textMuted },
+
+  crumb: { paddingHorizontal: spacing.xl, paddingTop: spacing.md },
+  crumbText: { fontSize: 13, color: colors.textMuted },
+
   loader: { marginTop: 48 },
+
+  grid: { padding: spacing.lg, gap: spacing.md },
+  gridRow: { gap: spacing.md },
+  tile: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  tilePressed: { borderColor: colors.primary },
+  tileImg: { width: '100%', height: 84, backgroundColor: '#f0f0ee' },
+  tileImgEmpty: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  tileText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+    padding: spacing.md,
+    lineHeight: 18,
+  },
+  allBtn: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  allBtnText: { color: colors.primary, fontWeight: '600', fontSize: 14 },
+
   list: { padding: spacing.lg, gap: spacing.sm },
   row: {
     flexDirection: 'row',
@@ -209,6 +346,7 @@ const s = StyleSheet.create({
   priceSale: { color: colors.accent },
   struck: { fontSize: 11, color: colors.textFaint, textDecorationLine: 'line-through' },
   gone: { fontSize: 10, color: colors.danger, marginTop: 2 },
+
   error: {
     marginHorizontal: spacing.xl,
     marginTop: spacing.md,
@@ -218,11 +356,5 @@ const s = StyleSheet.create({
     color: colors.danger,
     fontSize: 13,
   },
-  empty: {
-    textAlign: 'center',
-    color: colors.textFaint,
-    marginTop: 56,
-    paddingHorizontal: spacing.xxl,
-    lineHeight: 20,
-  },
+  empty: { textAlign: 'center', color: colors.textFaint, marginTop: 56 },
 });

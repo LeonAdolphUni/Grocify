@@ -23,16 +23,21 @@ Foto über die Claude API folgt in Sprint 3–5.
 | Schritt | Screen | Was passiert |
 |---|---|---|
 | 1 | `RecipeListScreen` | Rezepte anlegen und auswählen. Mehrfachauswahl ist Absicht — eine Wochenplanung besteht aus mehreren Rezepten |
-| 1a | `ProductSearchScreen` | Beim Anlegen: echtes Produkt aus dem Sortiment wählen statt frei zu tippen |
+| 1a | `ProductSearchScreen` | Beim Anlegen: echtes Produkt wählen. Einstieg über die 29 Abteilungen des Marktes (Abteilung → Unterabteilung → Produkte), Suche jederzeit zusätzlich |
 | 2 | `SupermarketScreen` | Albert Heijn oder Jumbo. Nicht verfügbare Märkte werden mit Begründung angezeigt, nicht versteckt |
 | 3 | `ShoppingListScreen` | Zutaten zusammenfassen, Produkte suchen, Packungen berechnen, Preise summieren |
 
 ## Produkt beim Anlegen selbst wählen
 
 Der zuverlässigste Weg: In der Zutatenzeile **„Produkt aus dem Sortiment
-wählen"** antippen, suchen, Produkt antippen. Die Zutat merkt sich dann
-Anbieter und Artikel-ID. Beim Bauen der Einkaufsliste wird für diese Zutat
-weder übersetzt noch gesucht — nur der Preis frisch geholt.
+wählen"** antippen. Es öffnet sich die Abteilungsübersicht des Marktes —
+29 Abteilungen mit Bild, darunter Unterabteilungen (17 allein beim Gemüse),
+darunter die Produkte. Wer den Suchbegriff kennt, tippt ihn stattdessen
+oben ein.
+
+Die Zutat merkt sich dann Anbieter und Artikel-ID. Beim Bauen der
+Einkaufsliste wird für diese Zutat weder übersetzt noch gesucht — nur der
+Preis frisch geholt.
 
 Das Rezept bleibt trotzdem über Name und Menge definiert, das gewählte
 Produkt ist nur eine Notiz dazu. Ein Rezept aus reinen Artikelnummern wäre

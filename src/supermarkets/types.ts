@@ -31,6 +31,7 @@ export interface Category {
   id: string;
   name: string;
   slug: string;
+  imageUrl?: string;
 }
 
 export interface PriceProvider {
@@ -63,10 +64,17 @@ export interface PriceProvider {
   getProductById(id: string): Promise<Product | null>;
 
   /**
-   * Abteilungsstruktur des Marktes.
-   * Wird genutzt, um die Einkaufsliste nach Laufweg im Laden zu sortieren.
+   * Oberste Abteilungen des Marktes.
+   * Dient zwei Zwecken: Einstieg zum Stöbern beim Anlegen eines Rezepts,
+   * und Sortierung der Einkaufsliste nach Laufweg im Laden.
    */
   getCategories(): Promise<Category[]>;
+
+  /** Unterabteilungen einer Abteilung. Leeres Array, wenn es keine gibt. */
+  getSubCategories(categoryId: string): Promise<Category[]>;
+
+  /** Produkte einer Abteilung durchblättern, ohne Suchbegriff. */
+  browseCategory(categoryId: string, options?: SearchOptions): Promise<SearchResult>;
 }
 
 /** Fehler einer Supermarkt-Anbindung, mit HTTP-Status wo vorhanden. */

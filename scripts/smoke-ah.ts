@@ -56,12 +56,30 @@ async function main() {
     console.log(`  ✗ FEHLGESCHLAGEN: ${(err as Error).message}`);
   }
 
-  // 3. Kategoriebaum — Grundlage für die Sortierung nach Ladenabteilung
+  // 3. Kategoriebaum — Grundlage für Stöbern und für die Sortierung der Liste
   console.log('\n── Abteilungen ──');
   try {
     const cats = await ah.getCategories();
-    console.log(`  ${cats.length} Abteilungen: ${cats.slice(0, 6).map((c) => c.name).join(', ')} …`);
+    console.log(`  ${cats.length} Abteilungen: ${cats.slice(0, 5).map((c) => c.name).join(', ')} …`);
     if (cats.length === 0) failures++;
+
+    const withImage = cats.filter((c) => c.imageUrl).length;
+    console.log(`  ${withImage} davon mit Bild`);
+
+    // 4. Eine Ebene tiefer und dann Produkte — der Weg beim Stöbern
+    const first = cats[0];
+    const subs = await ah.getSubCategories(first.id);
+    console.log(`\n── Unterabteilungen von „${first.name}" ──`);
+    console.log(`  ${subs.length}: ${subs.slice(0, 5).map((c) => c.name).join(', ')} …`);
+    if (subs.length === 0) failures++;
+
+    const target = subs[0] ?? first;
+    const browsed = await ah.browseCategory(target.id, { size: 4 });
+    console.log(`\n── Produkte in „${target.name}" (${browsed.totalResults} gesamt) ──`);
+    for (const p of browsed.products) {
+      console.log(`  ${euro(p.price).padStart(7)}  ${p.title.padEnd(38).slice(0, 38)} ${p.packageSize}`);
+    }
+    if (browsed.products.length === 0) failures++;
   } catch (err) {
     failures++;
     console.log(`  ✗ FEHLGESCHLAGEN: ${(err as Error).message}`);

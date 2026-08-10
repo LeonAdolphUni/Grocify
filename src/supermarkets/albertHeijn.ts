@@ -64,6 +64,13 @@ interface AhCategory {
   id: number;
   name: string;
   slugifiedName: string;
+  images?: { width: number; height: number; url: string }[];
+}
+
+/** Antwortform von .../categories/{id}/sub-categories — Objekt, kein Array. */
+interface AhSubCategories {
+  parent: AhCategory;
+  children: AhCategory[];
 }
 
 interface AhToken {
@@ -210,11 +217,42 @@ export class AlbertHeijnProvider implements PriceProvider {
       '/mobile-services/v1/product-shelves/categories',
     )) as AhCategory[];
 
-    return (data ?? []).map((c) => ({
+    return (data ?? []).map((c) => this.toCategory(c));
+  }
+
+  async getSubCategories(categoryId: string): Promise<Category[]> {
+    const data = (await this.authedFetch(
+      `/mobile-services/v1/product-shelves/categories/${categoryId}/sub-categories`,
+    )) as AhSubCategories;
+
+    return (data?.children ?? []).map((c) => this.toCategory(c));
+  }
+
+  async browseCategory(categoryId: string, options: SearchOptions = {}): Promise<SearchResult> {
+    // Dieselbe Suche wie sonst, nur ohne Suchbegriff und mit Abteilungsfilter.
+    const params = new URLSearchParams({
+      taxonomyId: categoryId,
+      size: String(options.size ?? 25),
+      page: String(options.page ?? 0),
+    });
+
+    const data = (await this.authedFetch(
+      `/mobile-services/product/search/v2?${params}`,
+    )) as AhSearchResponse;
+
+    return {
+      products: (data.products ?? []).map((p) => this.toProduct(p)),
+      totalResults: data.page?.totalElements ?? 0,
+    };
+  }
+
+  private toCategory(c: AhCategory): Category {
+    return {
       id: String(c.id),
       name: c.name,
       slug: c.slugifiedName,
-    }));
+      imageUrl: c.images?.at(-1)?.url,
+    };
   }
 
   /** Bildet die AH-Rohform auf das anbieterneutrale Product-Modell ab. */

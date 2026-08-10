@@ -47,4 +47,12 @@ export class JumboProvider implements PriceProvider {
   async getCategories(): Promise<Category[]> {
     throw new ProviderError(REASON, this.id, 403);
   }
+
+  async getSubCategories(): Promise<Category[]> {
+    throw new ProviderError(REASON, this.id, 403);
+  }
+
+  async browseCategory(): Promise<SearchResult> {
+    throw new ProviderError(REASON, this.id, 403);
+  }
 }
