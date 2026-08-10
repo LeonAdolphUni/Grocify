@@ -1,0 +1,7 @@
+# Zeilenenden im Repo immer LF, im Arbeitsverzeichnis nativ.
+# Verhindert, dass Windows-CRLF als Änderung in jedem Diff auftaucht.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
