@@ -101,6 +101,7 @@ export default function App() {
   return (
     <View style={styles.screen}>
       <ExpoStatusBar style="dark" />
+      <View style={styles.container}>
 
       <View style={styles.header}>
         <Text style={styles.brand}>Grocify</Text>
@@ -153,6 +154,7 @@ export default function App() {
           }
         />
       )}
+      </View>
     </View>
   );
 }
@@ -161,8 +163,19 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#f7f7f5',
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 12 : 60,
+    // iOS braucht Platz für die Notch, Android für die Statusleiste,
+    // im Browser reicht normaler Seitenabstand.
+    paddingTop: Platform.select({
+      ios: 60,
+      android: (StatusBar.currentHeight ?? 0) + 12,
+      default: 28,
+    }),
   },
+  /**
+   * Begrenzt die Inhaltsbreite. Ohne das zieht sich die Liste auf einem
+   * Desktop-Monitor über die volle Fensterbreite und wird unlesbar.
+   */
+  container: { flex: 1, width: '100%', maxWidth: 720, alignSelf: 'center' },
   header: { paddingHorizontal: 20, paddingBottom: 12 },
   brand: { fontSize: 30, fontWeight: '700', color: '#12351f', letterSpacing: -0.5 },
   subtitle: { fontSize: 14, color: '#6b7280', marginTop: 2 },

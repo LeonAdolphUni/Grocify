@@ -19,18 +19,30 @@ Voraussetzung: Node 20+ (getestet mit Node 24).
 
 ```bash
 npm install
-npm start          # Metro starten, QR-Code mit Expo Go scannen
-npm run smoke      # Albert-Heijn-Anbindung ohne App/Gerät testen
+npm run web        # Web-App im Browser — der aktuelle Hauptweg
+npm run smoke      # Albert-Heijn-Anbindung ohne App/Browser testen
 npm run typecheck  # TypeScript prüfen
 ```
 
-### Auf dem iPhone testen
+`npm run web` startet den Dev-Server auf http://localhost:8081 und öffnet den
+Browser. Ist der Port belegt, weicht Expo auf 8082 aus — im nicht-interaktiven
+Modus bricht es dabei allerdings ab, dann explizit starten:
 
-1. **Expo Go** aus dem App Store laden.
-2. `npm start`, dann den QR-Code mit der iPhone-Kamera scannen.
-3. Rechner und iPhone müssen im selben WLAN sein.
+```bash
+npx expo start --web --port 8082
+```
 
-Kein Mac nötig, kein Apple-Developer-Account, keine Kosten.
+### Später: dieselbe Codebasis auf dem iPhone
+
+Es ist **eine** Codebasis. Der Web-Weg ersetzt iOS nicht, er kommt daneben.
+Sobald du willst:
+
+```bash
+npm start   # QR-Code mit der iPhone-Kamera scannen, Expo Go öffnet die App
+```
+
+Voraussetzung: **Expo Go** aus dem App Store, Rechner und iPhone im selben
+WLAN. Kein Mac, kein Apple-Developer-Account, keine Kosten.
 
 > **Warum SDK 54 und nicht das neueste?**
 > Expo Go ist auf dem iPhone nur noch bis SDK 54 frei aus dem App Store
@@ -38,6 +50,15 @@ Kein Mac nötig, kein Apple-Developer-Account, keine Kosten.
 > Apple-Developer-Account (99 €/Jahr). Das Projekt ist deshalb bewusst auf
 > SDK 54 gepinnt. Ein Upgrade ist die bewusste Entscheidung, die zusammen
 > mit dem Developer-Account fällt — nicht vorher.
+
+### CORS
+
+Der Browser darf `api.ah.nl` direkt aufrufen: AH beantwortet den Preflight
+mit `Access-Control-Allow-Origin` und spiegelt die Origin zurück (geprüft
+08/2026). Es braucht deshalb **keinen Proxy und kein Backend** für die
+Produktsuche. Sollte AH das ändern, ist die Lösung eine Serverless-Funktion,
+die die Anfrage weiterreicht — der Eingriff bleibt auf `albertHeijn.ts`
+beschränkt.
 
 ## Struktur
 
