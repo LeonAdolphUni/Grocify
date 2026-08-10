@@ -13,8 +13,14 @@
  * international gleichen Wörtern (Broccoli, Pasta, Pizza) oft sogar trifft.
  */
 
-/** Deutscher Zutatenname (kleingeschrieben) → niederländischer Suchbegriff. */
-const DE_TO_NL: Record<string, string> = {
+/**
+ * Deutscher Zutatenname (kleingeschrieben) → niederländischer Suchbegriff.
+ *
+ * Exportiert, damit `npm run check:dict` jeden Eintrag gegen den echten
+ * Katalog prüfen kann. Einträge zu erfinden reicht nicht — „parmezaanse
+ * kaas" klingt richtig, führt bei Albert Heijn aber nur zu Käsecrackern.
+ */
+export const DE_TO_NL: Record<string, string> = {
   // Backen & Trockenware
   mehl: 'tarwebloem',
   weizenmehl: 'tarwebloem',
@@ -46,7 +52,10 @@ const DE_TO_NL: Record<string, string> = {
   joghurt: 'yoghurt',
   frischkaese: 'roomkaas',
   kaese: 'kaas',
-  parmesan: 'parmezaanse kaas',
+  // Nicht "parmezaanse kaas": Darunter führt AH nur Snacks (Grissini,
+  // Käsecracker), keinen echten Parmesan. Der Käse liegt unter dem
+  // italienischen Namen.
+  parmesan: 'parmigiano reggiano',
   mozzarella: 'mozzarella',
   ei: 'eieren',
   eier: 'eieren',

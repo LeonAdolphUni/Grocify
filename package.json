@@ -9,6 +9,7 @@
     "web": "expo start --web",
     "smoke": "tsx scripts/smoke-ah.ts",
     "smoke:list": "tsx scripts/smoke-list.ts",
+    "check:dict": "tsx scripts/check-dictionary.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

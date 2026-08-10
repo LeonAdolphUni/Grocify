@@ -64,6 +64,35 @@ export function mergeIngredients(recipes: Recipe[]): Ingredient[] {
   return [...groups.values()];
 }
 
+function wordsOf(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[\s,./()\-–—]+/)
+    .filter(Boolean);
+}
+
+/**
+ * Wie gut passt der Titel zum Suchbegriff? Kleiner ist besser.
+ *
+ * 0 = alle Suchwörter stehen als **eigenständige Wörter** im Titel
+ * 1 = sie stecken nur in zusammengesetzten Wörtern
+ * 2 = kommen gar nicht vor
+ *
+ * Die Unterscheidung zwischen 0 und 1 ist im Niederländischen entscheidend.
+ * Komposita sind dort die Regel, und eine reine Teilzeichenketten-Prüfung
+ * hält „Knoflooksaus" (Knoblauchsauce) für einen perfekten Treffer auf
+ * „knoflook" — dieselbe Falle liefert „Tomatenketchup" für „tomaten".
+ */
+function matchTier(title: string, searchTerm: string): 0 | 1 | 2 {
+  const titleWords = wordsOf(title);
+  const termWords = wordsOf(searchTerm);
+  if (termWords.length === 0) return 2;
+
+  if (termWords.every((q) => titleWords.includes(q))) return 0;
+  if (termWords.every((q) => titleWords.some((t) => t.includes(q)))) return 1;
+  return 2;
+}
+
 /**
  * Zählt Wörter im Produkttitel, die weder Marke noch Suchbegriff sind.
  *
@@ -72,19 +101,14 @@ export function mergeIngredients(recipes: Recipe[]): Ingredient[] {
  * eine Verarbeitungsform davon.
  */
 function extraWordCount(title: string, searchTerm: string): number {
-  const term = searchTerm.toLowerCase();
-  const words = title.toLowerCase().split(/[\s,./-]+/).filter(Boolean);
-  return words.filter(
+  const termWords = wordsOf(searchTerm);
+  return wordsOf(title).filter(
     (w) =>
       w !== 'ah' && // Eigenmarke, trägt keine Bedeutung
-      !w.includes(term) &&
-      !term.includes(w),
+      // Wörter, die einen Suchbegriff enthalten, zählen nicht als Zusatz:
+      // „uien" ist der Plural von „ui", „scharreleieren" eine Eiersorte.
+      !termWords.some((q) => w.includes(q) || q.includes(w)),
   ).length;
-}
-
-/** Enthält der Titel den Suchbegriff überhaupt? */
-function isRelevant(title: string, searchTerm: string): boolean {
-  return title.toLowerCase().includes(searchTerm.toLowerCase());
 }
 
 /**
@@ -119,21 +143,19 @@ export function chooseBestProduct(
   let pool = available.length > 0 ? available : candidates;
 
   if (searchTerm) {
-    const relevant = pool.filter((p) => isRelevant(p.title, searchTerm));
+    // Nur Produkte, die den Suchbegriff überhaupt tragen.
+    const relevant = pool.filter((p) => matchTier(p.title, searchTerm) < 2);
     if (relevant.length > 0) {
+      // Zusatzwörter zuerst: „Gele uien" (1 Zusatz) schlägt
+      // „Pie runderstoof ui 2-pack" (4 Zusätze). Keine Toleranz — schon ein
+      // Wort verschiebt die Bedeutung ("Tomaten" vs. "Tomaten gepeld").
       const minExtra = Math.min(...relevant.map((p) => extraWordCount(p.title, searchTerm)));
-      // Keine Toleranz: Schon ein Zusatzwort verschiebt die Bedeutung
-      // ("Tomaten" vs. "Tomaten gepeld" — frisch vs. Dose). Mit einem Wort
-      // Spielraum gewann im Test die billigere Dose gegen die Salattomate.
       pool = relevant.filter((p) => extraWordCount(p.title, searchTerm) === minExtra);
     }
   }
 
-  let best: { product: Product; packages: number; total: number } | null = null;
-
-  for (const product of pool) {
+  const score = (product: Product) => {
     let packages = 1;
-
     if (required && product.packageQuantity) {
       const packBase = toBase(product.packageQuantity);
       const needed = packBase ? packagesNeeded(required, packBase) : null;
@@ -141,9 +163,23 @@ export function chooseBestProduct(
       // Gebinde in Stück). Dann ist eine Packung die ehrlichste Annahme.
       packages = needed ?? 1;
     }
+    return { packages, total: Math.round(packages * product.price * 100) / 100 };
+  };
 
-    const total = Math.round(packages * product.price * 100) / 100;
-    if (!best || total < best.total) best = { product, packages, total };
+  let best: { product: Product; packages: number; total: number } | null = null;
+  let bestTier = 3;
+
+  for (const product of pool) {
+    const { packages, total } = score(product);
+    // Stichentscheid bei gleich vielen Zusatzwörtern: das eigenständige Wort
+    // gewinnt gegen das Kompositum — „Knoflook" statt „Knoflooksaus".
+    const tier = searchTerm ? matchTier(product.title, searchTerm) : 0;
+
+    const better = !best || tier < bestTier || (tier === bestTier && total < best.total);
+    if (better) {
+      best = { product, packages, total };
+      bestTier = tier;
+    }
   }
 
   return best;
