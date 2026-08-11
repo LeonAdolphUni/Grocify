@@ -21,6 +21,7 @@ interface Props {
   onDelete: (id: string) => void;
   onContinue: () => void;
   onLoadDemo: () => void;
+  onBack: () => void;
 }
 
 export function RecipeListScreen({
@@ -32,6 +33,7 @@ export function RecipeListScreen({
   onDelete,
   onContinue,
   onLoadDemo,
+  onBack,
 }: Props) {
   const selectedCount = selectedIds.length;
 
@@ -44,6 +46,7 @@ export function RecipeListScreen({
             ? 'Noch keine Rezepte'
             : `${recipes.length} gespeichert${selectedCount > 0 ? ` · ${selectedCount} ausgewählt` : ''}`
         }
+        onBack={onBack}
         right={<Button label="+ Neu" onPress={onCreate} />}
       />
 

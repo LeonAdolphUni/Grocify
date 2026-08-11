@@ -13,6 +13,7 @@
  */
 
 import { createDemoRecipes } from '../src/domain/demoRecipe';
+import { suggestRecipesForLeftovers } from '../src/domain/leftoverUse';
 import { buildShoppingList } from '../src/domain/shoppingList';
 import { calculateStats } from '../src/domain/types';
 import { formatQuantity } from '../src/domain/units';
@@ -58,6 +59,22 @@ async function main() {
   console.log(`  Positionen   ${stats.matched} zugeordnet, ${stats.unmatched} offen, ${stats.packages} Packungen`);
   if (stats.mostExpensive) {
     console.log(`  Teuerste     ${stats.mostExpensive.product?.title} — €${stats.mostExpensive.lineTotal.toFixed(2)}`);
+  }
+
+  // Restverwertung: Fünf Tage geplant, zwei Rezepte übrig — schlägt die App
+  // die richtigen vor, um die Reste aufzubrauchen?
+  console.log('\n── Restverwertung (nur 5 von 7 Tagen geplant) ──');
+  const partial = await buildShoppingList(recipes.slice(0, 5), ah);
+  const partialStats = calculateStats(partial);
+  console.log(`  Teilwoche: €${partial.total.toFixed(2)}, Verwertung ${pct(partialStats.utilization)}, Reste €${partialStats.leftoverValue.toFixed(2)}`);
+  const suggestions = suggestRecipesForLeftovers(partial, recipes);
+  if (suggestions.length === 0) {
+    console.log('  Keine Vorschläge — verdächtig, die Reste müssten zu etwas passen.');
+  } else {
+    for (const sug of suggestions) {
+      console.log(`  €${sug.value.toFixed(2)}  ${sug.recipe.title.padEnd(26)} verwertet: ` +
+        sug.uses.map((u) => `${u.ingredientName} ${Math.round(u.share * 100)} %`).join(', '));
+    }
   }
 
   const worst = week.items
