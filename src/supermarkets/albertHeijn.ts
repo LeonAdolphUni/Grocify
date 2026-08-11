@@ -110,8 +110,24 @@ interface AhToken {
  * Was nicht zuverlässig parsebar ist, gibt `undefined` zurück – lieber keine
  * Angabe als eine falsche, auf der später die Kaufmenge berechnet wird.
  */
-export function parsePackageSize(raw: string | undefined): Quantity | undefined {
+/**
+ * Erkennt Mehrfachpacks am Titel.
+ *
+ * AH verkauft Eier online nur als „3-pack" — drei Kartons zu je zehn Stück.
+ * Die Gebindeangabe lautet trotzdem „3 stuks". Wer das als drei Eier liest,
+ * kauft für zehn benötigte Eier vier Mehrfachpacks: 28,40 € statt 7,47 €.
+ *
+ * Die Zahl der Einheiten pro Karton steht nirgends in den Daten. Statt sie
+ * zu raten, gilt die Gebindegröße hier als unbekannt — dann wird eine
+ * Packung angenommen und die Zeile zum Prüfen markiert.
+ */
+function isMultipack(title: string | undefined): boolean {
+  return /\d+\s*-?\s*pack\b/i.test(title ?? '');
+}
+
+export function parsePackageSize(raw: string | undefined, title?: string): Quantity | undefined {
   if (!raw) return undefined;
+  if (isMultipack(title)) return undefined;
 
   const match = raw
     .toLowerCase()
@@ -299,7 +315,7 @@ export class AlbertHeijnProvider implements PriceProvider {
       price,
       priceBeforeDiscount: onSale ? p.priceBeforeBonus : undefined,
       packageSize: p.salesUnitSize ?? '',
-      packageQuantity: parsePackageSize(p.salesUnitSize),
+      packageQuantity: parsePackageSize(p.salesUnitSize, p.title),
       unitPriceDescription: p.unitPriceDescription,
       category: p.mainCategory,
       // 200 px reicht für ein Vorschaubild von 52 px auch auf einem

@@ -10,12 +10,19 @@ import type { PriceProvider } from '../supermarkets/types';
 import { isPantryStaple, normalizeKey, toDutchSearchTerm } from './translate';
 import type { Ingredient, Product, Recipe, ShoppingList, ShoppingListItem } from './types';
 import { calculateTotal, packagesNeeded } from './types';
-import { toBase, toBaseForIngredient } from './units';
+import { toBase, toBaseForIngredient, type BaseQuantity, type Unit } from './units';
 
 export interface BuildOptions {
   /** Vorratsware (Salz, Öl …) mit auf die Liste nehmen. Standard: nein. */
   includePantryStaples?: boolean;
-  /** Wie viele Produktkandidaten je Zutat geprüft werden. */
+  /**
+   * Wie viele Produktkandidaten je Zutat geprüft werden.
+   *
+   * Großzügig gewählt: Bei „champignons" stehen auf den ersten acht Plätzen
+   * Suppen und Saucen, das eigentliche Produkt erst auf Platz neun. Ein
+   * kleines Fenster schneidet den richtigen Treffer ab, und die Kosten sind
+   * null — es ist dieselbe eine Anfrage, nur mit größerem `size`.
+   */
   candidatesPerIngredient?: number;
   /** Fortschrittsmeldung für die UI. */
   onProgress?: (done: number, total: number, currentLabel: string) => void;
@@ -72,25 +79,42 @@ function wordsOf(text: string): string[] {
 }
 
 /**
+ * Sind zwei Wörter dasselbe Wort, nur in anderer Zahl?
+ *
+ * „ui" und „uien" ja, „knoflook" und „knoflooksaus" nein. Der Unterschied
+ * ist eine kurze Endung gegen ein ganzes zweites Wort — genau daran hängt,
+ * ob ein Treffer das gesuchte Produkt ist oder eine Verarbeitung davon.
+ */
+function sameWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  const suffix = long.slice(short.length);
+  return long.startsWith(short) && ['s', 'e', 'en', 'es'].includes(suffix);
+}
+
+/**
  * Wie gut passt der Titel zum Suchbegriff? Kleiner ist besser.
  *
- * 0 = alle Suchwörter stehen als **eigenständige Wörter** im Titel
- * 1 = sie stecken nur in zusammengesetzten Wörtern
- * 2 = kommen gar nicht vor
+ * 0 = eigenständiges Wort, Singular/Plural zählt mit → „Witte champignons"
+ * 1 = Kompositum, das auf den Begriff **endet** → „Kastanjechampignons"
+ * 2 = Kompositum, in dem der Begriff sonstwo steckt → „Champignonsoep"
+ * 3 = kommt gar nicht vor
  *
- * Die Unterscheidung zwischen 0 und 1 ist im Niederländischen entscheidend.
- * Komposita sind dort die Regel, und eine reine Teilzeichenketten-Prüfung
- * hält „Knoflooksaus" (Knoblauchsauce) für einen perfekten Treffer auf
- * „knoflook" — dieselbe Falle liefert „Tomatenketchup" für „tomaten".
+ * Die Trennung von 1 und 2 folgt dem niederländischen Wortbau: Das
+ * Grundwort steht hinten. „scharrel+eieren" ist eine *Sorte* Eier und damit
+ * brauchbar, „champignon+soep" ist eine *Suppe aus* Champignons und damit
+ * etwas anderes. Dieselbe Regel trennt „Kastanjechampignons" (Sorte) von
+ * „Knoflooksaus" (Verarbeitung).
  */
-function matchTier(title: string, searchTerm: string): 0 | 1 | 2 {
+function matchTier(title: string, searchTerm: string): 0 | 1 | 2 | 3 {
   const titleWords = wordsOf(title);
   const termWords = wordsOf(searchTerm);
-  if (termWords.length === 0) return 2;
+  if (termWords.length === 0) return 3;
 
-  if (termWords.every((q) => titleWords.includes(q))) return 0;
-  if (termWords.every((q) => titleWords.some((t) => t.includes(q)))) return 1;
-  return 2;
+  if (termWords.every((q) => titleWords.some((t) => sameWord(t, q)))) return 0;
+  if (termWords.every((q) => titleWords.some((t) => t.endsWith(q)))) return 1;
+  if (termWords.every((q) => titleWords.some((t) => t.includes(q)))) return 2;
+  return 3;
 }
 
 /**
@@ -143,14 +167,18 @@ export function chooseBestProduct(
   let pool = available.length > 0 ? available : candidates;
 
   if (searchTerm) {
-    // Nur Produkte, die den Suchbegriff überhaupt tragen.
-    const relevant = pool.filter((p) => matchTier(p.title, searchTerm) < 2);
-    if (relevant.length > 0) {
-      // Zusatzwörter zuerst: „Gele uien" (1 Zusatz) schlägt
-      // „Pie runderstoof ui 2-pack" (4 Zusätze). Keine Toleranz — schon ein
-      // Wort verschiebt die Bedeutung ("Tomaten" vs. "Tomaten gepeld").
-      const minExtra = Math.min(...relevant.map((p) => extraWordCount(p.title, searchTerm)));
-      pool = relevant.filter((p) => extraWordCount(p.title, searchTerm) === minExtra);
+    // Erst die Trefferstufe: Ein eigenständiges Wort schlägt jedes
+    // Kompositum. Das trennt „Witte champignons" von „Champignonsoep",
+    // ohne „Gele uien" gegen „ui" zu benachteiligen — Plural zählt als
+    // dasselbe Wort.
+    const bestTier = Math.min(...pool.map((p) => matchTier(p.title, searchTerm)));
+    if (bestTier < 3) {
+      const sameTier = pool.filter((p) => matchTier(p.title, searchTerm) === bestTier);
+      // Dann die Zusatzwörter: „AH Tomaten" schlägt „AH Tomaten gepeld",
+      // frisch schlägt Dose. Keine Toleranz — schon ein Wort verschiebt
+      // die Bedeutung.
+      const minExtra = Math.min(...sameTier.map((p) => extraWordCount(p.title, searchTerm)));
+      pool = sameTier.filter((p) => extraWordCount(p.title, searchTerm) === minExtra);
     }
   }
 
@@ -185,6 +213,41 @@ export function chooseBestProduct(
   return best;
 }
 
+/**
+ * Rechnet aus, wie viel vom Gekauften übrig bleibt.
+ *
+ * Bedarf 300 g, Gebinde 1 kg, eine Packung gekauft → 30 % verwertet,
+ * 700 g übrig. Der Geldwert des Rests ist anteilig geschätzt, nicht exakt:
+ * Bei Frischware entspricht das der Realität, bei Gewürzen weniger.
+ * Für die Frage „lohnt sich der Wochenplan?" ist die Näherung gut genug.
+ */
+function computeLeftover(
+  required: BaseQuantity | null,
+  product: Product,
+  packages: number,
+  lineTotal: number,
+): Pick<ShoppingListItem, 'utilization' | 'leftover' | 'leftoverValue'> {
+  const packBase = product.packageQuantity ? toBase(product.packageQuantity) : null;
+
+  // Ohne rechenbaren Bedarf oder Gebinde gibt es nichts zu vergleichen.
+  // Dann lieber keine Zahl als eine erfundene.
+  if (!required || !packBase || packBase.amount <= 0) return { leftoverValue: 0 };
+  if (required.dimension !== packBase.dimension) return { leftoverValue: 0 };
+
+  const bought = packBase.amount * packages;
+  if (bought <= 0) return { leftoverValue: 0 };
+
+  const utilization = Math.min(1, required.amount / bought);
+  const unit: Unit =
+    packBase.dimension === 'mass' ? 'g' : packBase.dimension === 'volume' ? 'ml' : 'Stueck';
+
+  return {
+    utilization,
+    leftover: { amount: Math.round(Math.max(0, bought - required.amount) * 10) / 10, unit },
+    leftoverValue: Math.round(lineTotal * (1 - utilization) * 100) / 100,
+  };
+}
+
 /** Führt asynchrone Aufgaben mit begrenzter Parallelität aus. */
 async function mapLimit<T, R>(
   items: T[],
@@ -210,7 +273,7 @@ export async function buildShoppingList(
   provider: PriceProvider,
   options: BuildOptions = {},
 ): Promise<ShoppingList> {
-  const { includePantryStaples = false, candidatesPerIngredient = 6, onProgress } = options;
+  const { includePantryStaples = false, candidatesPerIngredient = 24, onProgress } = options;
 
   const merged = mergeIngredients(recipes).filter(
     (ing) => includePantryStaples || !(ing.isPantryStaple || isPantryStaple(ing.name)),
@@ -260,6 +323,7 @@ export async function buildShoppingList(
           needsManualMatch: true,
           note: `Kein Produkt für „${searchTerm}" gefunden`,
           checked: false,
+          leftoverValue: 0,
         };
       } else {
         item = {
@@ -268,6 +332,7 @@ export async function buildShoppingList(
           requiredQuantity: ing.quantity,
           packagesToBuy: best.packages,
           lineTotal: best.total,
+          ...computeLeftover(required, best.product, best.packages, best.total),
           needsManualMatch: false,
           note: pinMissing
             ? `Dein gewähltes Produkt „${pin?.title}" gibt es nicht mehr — Ersatz automatisch gesucht`
@@ -287,6 +352,7 @@ export async function buildShoppingList(
         needsManualMatch: true,
         note: `Suche fehlgeschlagen: ${(err as Error).message}`,
         checked: false,
+        leftoverValue: 0,
       };
     }
 

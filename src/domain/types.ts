@@ -113,6 +113,22 @@ export interface ShoppingListItem {
   /** Warum diese Zeile Aufmerksamkeit braucht, in Klartext für die UI. */
   note?: string;
   checked: boolean;
+
+  /**
+   * Anteil des gekauften Gebindes, der tatsächlich gebraucht wird (0…1).
+   *
+   * Das ist die eigentlich interessante Zahl: Wer 1 kg Mehl für 300 g Bedarf
+   * kauft, wirft 70 % in den Schrank. Ein Wochenplan, der Zutaten über
+   * mehrere Tage verwertet, hebt diesen Wert — und genau das macht ihn
+   * messbar besser als sieben einzeln geplante Abende.
+   *
+   * `undefined`, wenn Bedarf oder Gebinde nicht rechenbar sind.
+   */
+  utilization?: number;
+  /** Was nach dem Kochen übrig bleibt, in der Einheit des Gebindes. */
+  leftover?: Quantity;
+  /** Geldwert des Rests. Anteilig am Zeilenpreis, nicht exakt. */
+  leftoverValue: number;
 }
 
 export interface ShoppingList {
@@ -148,4 +164,56 @@ export function packagesNeeded(
 export function calculateTotal(items: ShoppingListItem[]): number {
   const sum = items.reduce((acc, item) => acc + item.lineTotal, 0);
   return Math.round(sum * 100) / 100;
+}
+
+/** Kennzahlen einer Einkaufsliste — Grundlage des Statistikfensters. */
+export interface ListStats {
+  total: number;
+  /** Positionen, die einem Produkt zugeordnet werden konnten. */
+  matched: number;
+  unmatched: number;
+  /** Anzahl Packungen im Einkaufswagen. */
+  packages: number;
+  /** Gewichteter Anteil des Eingekauften, der tatsächlich verkocht wird. */
+  utilization: number | null;
+  /** Geldwert dessen, was übrig bleibt. */
+  leftoverValue: number;
+  /** Gesamtzahl geplanter Portionen über alle Rezepte. */
+  servings: number;
+  /** Preis je Portion. `null`, wenn keine Portionen bekannt sind. */
+  pricePerServing: number | null;
+  /** Teuerste Position — dort lohnt sich das Nachjustieren am meisten. */
+  mostExpensive: ShoppingListItem | null;
+}
+
+export function calculateStats(list: ShoppingList): ListStats {
+  const items = list.items;
+  const matched = items.filter((i) => i.product !== null);
+  const servings = list.recipes.reduce((n, r) => n + r.servings, 0);
+
+  // Verwertung nach Geldwert gewichten, nicht nach Zeilenzahl: Ein Rest
+  // Basilikum für 20 Cent wiegt nicht so schwer wie ein halbes Stück Käse.
+  const weighable = matched.filter((i) => i.utilization !== undefined);
+  const weighedValue = weighable.reduce((sum, i) => sum + i.lineTotal, 0);
+  const utilization =
+    weighedValue > 0
+      ? weighable.reduce((sum, i) => sum + (i.utilization ?? 0) * i.lineTotal, 0) / weighedValue
+      : null;
+
+  const total = calculateTotal(items);
+
+  return {
+    total,
+    matched: matched.length,
+    unmatched: items.length - matched.length,
+    packages: items.reduce((n, i) => n + i.packagesToBuy, 0),
+    utilization,
+    leftoverValue: Math.round(items.reduce((s, i) => s + i.leftoverValue, 0) * 100) / 100,
+    servings,
+    pricePerServing: servings > 0 ? Math.round((total / servings) * 100) / 100 : null,
+    mostExpensive:
+      matched.length > 0
+        ? matched.reduce((a, b) => (b.lineTotal > a.lineTotal ? b : a))
+        : null,
+  };
 }
