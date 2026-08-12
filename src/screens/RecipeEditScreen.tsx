@@ -1,29 +1,37 @@
 /**
  * Rezept anlegen und bearbeiten.
  *
- * Zwei Wege, eine Zutat einzutragen:
+ * Der schnelle Weg ist eine einzige Zeile: „Milch 0,5 l" eintippen, fertig.
+ * Die App zerlegt das in Name, Menge und Einheit und sucht **sofort** das
+ * passende Produkt im Sortiment. Passt der Treffer nicht, tauscht ein Tipp
+ * ihn gegen ein selbst gewähltes.
  *
- * 1. **Aus dem Sortiment wählen** — Produktsuche öffnen, echtes Produkt
- *    antippen. Damit steht die Zuordnung fest; beim Bauen der Einkaufsliste
- *    wird weder übersetzt noch geraten, nur der Preis frisch geholt.
- * 2. **Frei eintippen** — für alles, was nicht im Sortiment steht, und für
- *    schnelles Erfassen. Die Zuordnung übernimmt dann die Heuristik.
- *
- * Ab Sprint 3 kommt der Import aus Text, Link und Foto dazu. Dieser Screen
- * bleibt als Korrekturansicht bestehen: Eine automatische Erkennung, die
- * man nicht nachbessern kann, ist wertlos.
+ * Alle Felder bleiben trotzdem einzeln bearbeitbar — eine Automatik, die
+ * man nicht korrigieren kann, ist keine Hilfe, sondern eine Zumutung.
  */
 
-import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
+import { parseIngredientInput } from '../domain/parseIngredient';
+import { findProductFor } from '../domain/shoppingList';
 import { isPantryStaple, normalizeKey, toDutchSearchTerm } from '../domain/translate';
 import type { Ingredient, PinnedProduct, Product, Recipe } from '../domain/types';
-import type { Unit } from '../domain/units';
+import { formatQuantity, type Unit } from '../domain/units';
 import { newId } from '../storage/recipeStore';
-import { SEARCH_PROVIDER_ID } from '../supermarkets/registry';
+import { getProvider, SEARCH_PROVIDER_ID } from '../supermarkets/registry';
 import { Button, Card, Header, Screen } from '../ui/components';
-import { colors, radius, spacing } from '../ui/theme';
+import { colors, euro, radius, spacing } from '../ui/theme';
 import { ProductSearchScreen } from './ProductSearchScreen';
 
 const UNITS: Unit[] = [
@@ -32,11 +40,6 @@ const UNITS: Unit[] = [
 
 const unitLabel = (u: Unit) => (u === 'Stueck' ? 'Stk' : u);
 
-/**
- * Sinnvolle Einheit für ein gewähltes Produkt.
- * Rezepte nennen Gramm und Milliliter, Gebinde nennen Kilo und Liter —
- * deshalb wird heruntergerechnet statt übernommen.
- */
 function unitForProduct(product: Product): Unit {
   switch (product.packageQuantity?.unit) {
     case 'kg':
@@ -52,13 +55,21 @@ function unitForProduct(product: Product): Unit {
   }
 }
 
-/** Zeile im Formular — Mengen sind hier Text, weil "1," ein gültiger Zwischenstand ist. */
+/** Stand der automatischen Produktsuche für eine Zeile. */
+type Lookup = 'idle' | 'searching' | 'done' | 'nothing' | 'error';
+
 interface Draft {
   key: string;
   name: string;
   amount: string;
   unit: Unit;
   pinned?: PinnedProduct;
+  /** Preis des gefundenen Produkts, nur zur Anzeige. */
+  price?: number;
+  imageUrl?: string;
+  lookup: Lookup;
+  /** Aufgeklappte Detailfelder — standardmäßig zu, das spart Fläche. */
+  open?: boolean;
 }
 
 function toDraft(ing: Ingredient): Draft {
@@ -68,10 +79,9 @@ function toDraft(ing: Ingredient): Draft {
     amount: String(ing.quantity.amount),
     unit: ing.quantity.unit,
     pinned: ing.pinnedProduct,
+    lookup: ing.pinnedProduct ? 'done' : 'idle',
   };
 }
-
-const emptyDraft = (): Draft => ({ key: newId(), name: '', amount: '', unit: 'g' });
 
 interface Props {
   recipe?: Recipe;
@@ -82,23 +92,84 @@ interface Props {
 export function RecipeEditScreen({ recipe, onSave, onCancel }: Props) {
   const [title, setTitle] = useState(recipe?.title ?? '');
   const [servings, setServings] = useState(String(recipe?.servings ?? 2));
-  const [drafts, setDrafts] = useState<Draft[]>(
-    recipe?.ingredients.length ? recipe.ingredients.map(toDraft) : [emptyDraft()],
-  );
-  /** Schlüssel der Zeile, für die gerade die Produktsuche offen ist. */
+  const [drafts, setDrafts] = useState<Draft[]>(recipe?.ingredients.map(toDraft) ?? []);
+  const [quick, setQuick] = useState('');
   const [searchingKey, setSearchingKey] = useState<string | null>(null);
 
-  const update = (key: string, patch: Partial<Draft>) =>
-    setDrafts((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  const provider = getProvider(SEARCH_PROVIDER_ID);
+
+  const update = useCallback(
+    (key: string, patch: Partial<Draft>) =>
+      setDrafts((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r))),
+    [],
+  );
+
+  /** Sucht im Hintergrund das passende Produkt und heftet es an die Zeile. */
+  const lookup = useCallback(
+    async (key: string, name: string, amount: number, unit: Unit) => {
+      if (!provider?.available) return;
+      update(key, { lookup: 'searching' });
+      try {
+        const product = await findProductFor(
+          {
+            id: normalizeKey(name),
+            name,
+            quantity: { amount, unit },
+            searchTermNl: toDutchSearchTerm(name),
+          },
+          provider,
+        );
+        if (!product) return update(key, { lookup: 'nothing' });
+        update(key, {
+          lookup: 'done',
+          price: product.price,
+          imageUrl: product.imageUrl,
+          pinned: {
+            provider: product.provider,
+            id: product.id,
+            title: product.title,
+            packageSize: product.packageSize,
+          },
+        });
+      } catch {
+        update(key, { lookup: 'error' });
+      }
+    },
+    [provider, update],
+  );
+
+  /** „Milch 0,5 l" → Zeile anlegen und sofort suchen. */
+  const addQuick = useCallback(() => {
+    const parsed = parseIngredientInput(quick);
+    if (!parsed) return;
+
+    const key = newId();
+    setDrafts((rows) => [
+      ...rows,
+      {
+        key,
+        name: parsed.name,
+        amount: String(parsed.quantity.amount),
+        unit: parsed.quantity.unit,
+        lookup: 'idle',
+        // Wurde keine Einheit erkannt, ist die Annahme „1 Stück" oft falsch.
+        // Dann öffnet die Zeile sich, damit man es gleich sieht.
+        open: !parsed.hasUnit && !parsed.hasAmount,
+      },
+    ]);
+    setQuick('');
+    void lookup(key, parsed.name, parsed.quantity.amount, parsed.quantity.unit);
+  }, [quick, lookup]);
 
   const handlePick = (product: Product) => {
     if (!searchingKey) return;
     const row = drafts.find((d) => d.key === searchingKey);
     update(searchingKey, {
-      // Einen bereits getippten Namen nicht überschreiben — der Nutzer hat
-      // sich etwas dabei gedacht. Nur die leere Zeile wird gefüllt.
       name: row?.name.trim() ? row.name : product.title,
       unit: row?.amount.trim() ? row.unit : unitForProduct(product),
+      price: product.price,
+      imageUrl: product.imageUrl,
+      lookup: 'done',
       pinned: {
         provider: product.provider,
         id: product.id,
@@ -114,10 +185,8 @@ export function RecipeEditScreen({ recipe, onSave, onCancel }: Props) {
 
   const handleSave = () => {
     if (!canSave) return;
-
     const ingredients: Ingredient[] = filled.map((d) => {
       const name = d.name.trim();
-      // Komma als Dezimaltrennzeichen zulassen — deutsche Eingabegewohnheit.
       const amount = Number.parseFloat(d.amount.replace(',', '.')) || 0;
       return {
         id: normalizeKey(name),
@@ -139,6 +208,7 @@ export function RecipeEditScreen({ recipe, onSave, onCancel }: Props) {
     });
   };
 
+  const preview = parseIngredientInput(quick);
   const searchingRow = drafts.find((d) => d.key === searchingKey);
 
   return (
@@ -158,7 +228,6 @@ export function RecipeEditScreen({ recipe, onSave, onCancel }: Props) {
             onChangeText={setTitle}
             placeholder="z. B. Spaghetti Bolognese"
           />
-
           <Text style={[s.label, s.labelSpaced]}>Portionen</Text>
           <TextInput
             style={[s.input, s.inputNarrow]}
@@ -168,84 +237,137 @@ export function RecipeEditScreen({ recipe, onSave, onCancel }: Props) {
           />
         </Card>
 
-        <Text style={s.section}>Zutaten</Text>
+        {/* ── Schnelleingabe ── */}
+        <Card style={s.quickCard}>
+          <Text style={s.quickLabel}>Zutat eintippen</Text>
+          <View style={s.quickRow}>
+            <TextInput
+              style={[s.input, s.flex]}
+              value={quick}
+              onChangeText={setQuick}
+              onSubmitEditing={addQuick}
+              placeholder="Milch 0,5 l"
+              returnKeyType="done"
+              autoCorrect={false}
+            />
+            <Pressable
+              onPress={addQuick}
+              disabled={!preview}
+              style={({ pressed }) => [s.addBtn, !preview && s.addBtnOff, pressed && s.pressed]}
+            >
+              <Text style={s.addBtnText}>+</Text>
+            </Pressable>
+          </View>
 
+          {preview ? (
+            <Text style={s.preview}>
+              {preview.name} · {formatQuantity(preview.quantity)}
+              {!preview.hasUnit && !preview.hasAmount ? '  (Menge geraten)' : ''}
+            </Text>
+          ) : (
+            <Text style={s.quickHint}>
+              Menge und Einheit dürfen vorn oder hinten stehen: „500 g Mehl", „Mehl 500g",
+              „2 Zehen Knoblauch", „1/2 l Sahne".
+            </Text>
+          )}
+        </Card>
+
+        {/* ── Zutatenliste ── */}
         {drafts.map((d) => (
-          <Card key={d.key} style={s.ingredientCard}>
-            <View style={s.rowTop}>
-              <TextInput
-                style={[s.input, s.flex]}
-                value={d.name}
-                onChangeText={(name) => update(d.key, { name })}
-                placeholder="Zutat, z. B. Weizenmehl"
-              />
-              <TextInput
-                style={[s.input, s.amountInput]}
-                value={d.amount}
-                onChangeText={(amount) => update(d.key, { amount })}
-                placeholder="200"
-                keyboardType="decimal-pad"
-              />
-              {drafts.length > 1 ? (
+          <Card key={d.key} style={s.row}>
+            <View style={s.rowMain}>
+              {d.imageUrl ? (
+                <Image source={{ uri: d.imageUrl }} style={s.thumb} />
+              ) : (
+                <View style={[s.thumb, s.thumbEmpty]} />
+              )}
+
+              <Pressable style={s.rowBody} onPress={() => update(d.key, { open: !d.open })}>
+                <Text style={s.rowName}>
+                  {d.name || 'Ohne Namen'}
+                  <Text style={s.rowQty}>
+                    {'  '}
+                    {d.amount || '?'} {unitLabel(d.unit)}
+                  </Text>
+                </Text>
+
+                {d.lookup === 'searching' ? (
+                  <View style={s.lookupRow}>
+                    <ActivityIndicator size="small" />
+                    <Text style={s.lookupText}>wird im Laden gesucht …</Text>
+                  </View>
+                ) : d.lookup === 'done' && d.pinned ? (
+                  <Text style={s.found} numberOfLines={1}>
+                    ✓ {d.pinned.title}
+                    {d.pinned.packageSize ? ` · ${d.pinned.packageSize}` : ''}
+                    {d.price !== undefined ? ` · ${euro(d.price)}` : ''}
+                  </Text>
+                ) : d.lookup === 'nothing' ? (
+                  <Text style={s.notFound}>Kein Produkt gefunden — bitte selbst wählen</Text>
+                ) : d.lookup === 'error' ? (
+                  <Text style={s.notFound}>Suche fehlgeschlagen</Text>
+                ) : null}
+              </Pressable>
+
+              <View style={s.rowActions}>
+                <Pressable onPress={() => setSearchingKey(d.key)} hitSlop={8}>
+                  <Text style={s.change}>{d.pinned ? 'ändern' : 'wählen'}</Text>
+                </Pressable>
                 <Pressable
                   onPress={() => setDrafts((rows) => rows.filter((r) => r.key !== d.key))}
                   hitSlop={8}
-                  style={s.remove}
                 >
-                  <Text style={s.removeText}>✕</Text>
+                  <Text style={s.remove}>✕</Text>
                 </Pressable>
-              ) : null}
+              </View>
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.units}>
-              {UNITS.map((u) => (
-                <Pressable
-                  key={u}
-                  onPress={() => update(d.key, { unit: u })}
-                  style={[s.chip, d.unit === u && s.chipOn]}
-                >
-                  <Text style={[s.chipText, d.unit === u && s.chipTextOn]}>{unitLabel(u)}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            {d.pinned ? (
-              <View style={s.pinned}>
-                <View style={s.flex}>
-                  <Text style={s.pinnedTitle}>✓ {d.pinned.title}</Text>
-                  <Text style={s.pinnedMeta}>
-                    {d.pinned.packageSize} · fest gewählt, wird nicht gesucht
-                  </Text>
+            {/* Detailfelder, aufklappbar */}
+            {d.open ? (
+              <View style={s.details}>
+                <View style={s.detailRow}>
+                  <TextInput
+                    style={[s.input, s.flex]}
+                    value={d.name}
+                    onChangeText={(name) => update(d.key, { name })}
+                    placeholder="Zutat"
+                  />
+                  <TextInput
+                    style={[s.input, s.amountInput]}
+                    value={d.amount}
+                    onChangeText={(amount) => update(d.key, { amount })}
+                    keyboardType="decimal-pad"
+                  />
                 </View>
-                <Pressable onPress={() => update(d.key, { pinned: undefined })} hitSlop={8}>
-                  <Text style={s.pinnedClear}>lösen</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <View style={s.pickRow}>
-                <Pressable
-                  onPress={() => setSearchingKey(d.key)}
-                  style={({ pressed }) => [s.pick, pressed && s.pickPressed]}
-                >
-                  <Text style={s.pickText}>Produkt aus dem Sortiment wählen</Text>
-                </Pressable>
-                {d.name.trim() ? (
-                  <Text style={s.hint}>sonst gesucht als „{toDutchSearchTerm(d.name.trim())}"</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {UNITS.map((u) => (
+                    <Pressable
+                      key={u}
+                      onPress={() => update(d.key, { unit: u })}
+                      style={[s.chip, d.unit === u && s.chipOn]}
+                    >
+                      <Text style={[s.chipText, d.unit === u && s.chipTextOn]}>
+                        {unitLabel(u)}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+                {isPantryStaple(d.name) && d.name.trim() ? (
+                  <Text style={s.staple}>
+                    Als Vorrat eingestuft — kommt nicht auf die Einkaufsliste
+                  </Text>
                 ) : null}
               </View>
-            )}
-
-            {isPantryStaple(d.name) && d.name.trim() ? (
-              <Text style={s.staple}>Als Vorrat eingestuft — kommt nicht auf die Einkaufsliste</Text>
             ) : null}
           </Card>
         ))}
 
-        <Button
-          label="+ Zutat hinzufügen"
-          variant="secondary"
-          onPress={() => setDrafts((rows) => [...rows, emptyDraft()])}
-        />
+        {drafts.length === 0 ? (
+          <Text style={s.empty}>
+            Noch keine Zutaten. Tippe oben eine ein — die App sucht das Produkt sofort
+            im Sortiment.
+          </Text>
+        ) : null}
       </ScrollView>
 
       <View style={s.footer}>
@@ -288,21 +410,47 @@ const s = StyleSheet.create({
     fontSize: 15,
   },
   inputNarrow: { width: 96 },
-  section: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textMuted,
-    marginTop: spacing.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  ingredientCard: { gap: spacing.sm },
-  rowTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   flex: { flex: 1 },
+
+  quickCard: { borderColor: colors.primary, gap: spacing.sm },
+  quickLabel: { fontSize: 13, fontWeight: '600', color: colors.primary },
+  quickRow: { flexDirection: 'row', gap: spacing.sm },
+  addBtn: {
+    width: 48,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addBtnOff: { opacity: 0.35 },
+  pressed: { opacity: 0.75 },
+  addBtnText: { color: '#fff', fontSize: 22, fontWeight: '700', lineHeight: 26 },
+  preview: { fontSize: 13, color: colors.primary, fontWeight: '600' },
+  quickHint: { fontSize: 12, color: colors.textFaint, lineHeight: 17 },
+
+  row: { gap: spacing.sm },
+  rowMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  thumb: { width: 44, height: 44, borderRadius: radius.sm, backgroundColor: colors.surface },
+  thumbEmpty: { backgroundColor: '#f0f0ee', borderWidth: 1, borderColor: colors.border },
+  rowBody: { flex: 1 },
+  rowName: { fontSize: 15, fontWeight: '600', color: colors.text },
+  rowQty: { fontSize: 13, fontWeight: '400', color: colors.textMuted },
+  lookupRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 3 },
+  lookupText: { fontSize: 12, color: colors.textMuted },
+  found: { fontSize: 12, color: colors.primary, marginTop: 3 },
+  notFound: { fontSize: 12, color: colors.accent, marginTop: 3 },
+  rowActions: { alignItems: 'flex-end', gap: spacing.sm },
+  change: { fontSize: 12, color: colors.textMuted, textDecorationLine: 'underline' },
+  remove: { fontSize: 15, color: colors.textFaint },
+
+  details: {
+    gap: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.sm,
+  },
+  detailRow: { flexDirection: 'row', gap: spacing.sm },
   amountInput: { width: 84, textAlign: 'right' },
-  remove: { padding: spacing.xs },
-  removeText: { color: colors.textFaint, fontSize: 17 },
-  units: { marginTop: spacing.xs },
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
@@ -314,32 +462,15 @@ const s = StyleSheet.create({
   chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { fontSize: 13, color: colors.textMuted },
   chipTextOn: { color: '#fff', fontWeight: '600' },
-
-  pickRow: { gap: spacing.xs },
-  pick: {
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-  },
-  pickPressed: { backgroundColor: '#f0f4f1' },
-  pickText: { color: colors.primary, fontWeight: '600', fontSize: 14 },
-  hint: { fontSize: 12, color: colors.textFaint, fontStyle: 'italic', textAlign: 'center' },
-
-  pinned: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.successBg,
-    borderRadius: radius.md,
-    padding: spacing.md,
-  },
-  pinnedTitle: { fontSize: 14, fontWeight: '600', color: colors.primary },
-  pinnedMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  pinnedClear: { fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline' },
-
   staple: { fontSize: 12, color: colors.accent },
+
+  empty: {
+    textAlign: 'center',
+    color: colors.textFaint,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl,
+    lineHeight: 20,
+  },
   footer: {
     padding: spacing.lg,
     borderTopWidth: 1,

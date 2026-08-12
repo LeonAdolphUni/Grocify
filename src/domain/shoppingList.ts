@@ -248,6 +248,28 @@ function computeLeftover(
   };
 }
 
+/**
+ * Sucht das passende Produkt für eine einzelne Zutat.
+ *
+ * Nutzt dieselbe Auswahl wie die Einkaufsliste — was beim Anlegen des
+ * Rezepts vorgeschlagen wird, ist damit auch das, was später im Einkauf
+ * landet. Zwei getrennte Verfahren würden den Nutzer verwirren, sobald sie
+ * einmal auseinanderlaufen.
+ */
+export async function findProductFor(
+  ingredient: Pick<Ingredient, 'id' | 'name' | 'quantity' | 'searchTermNl'>,
+  provider: PriceProvider,
+): Promise<Product | null> {
+  const searchTerm = ingredient.searchTermNl?.trim() || toDutchSearchTerm(ingredient.name);
+  const required = toBaseForIngredient(
+    ingredient.quantity,
+    ingredient.id || normalizeKey(ingredient.name),
+  );
+
+  const { products } = await provider.searchProducts(searchTerm, { size: 24 });
+  return chooseBestProduct(products, required, searchTerm)?.product ?? null;
+}
+
 /** Führt asynchrone Aufgaben mit begrenzter Parallelität aus. */
 async function mapLimit<T, R>(
   items: T[],
