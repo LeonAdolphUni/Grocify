@@ -22,7 +22,7 @@ import {
   type Weekday,
 } from '../domain/weekPlan';
 import { Button, Card, Header, Screen } from '../ui/components';
-import { colors, radius, spacing } from '../ui/theme';
+import { colors, radius, recipeIcon, spacing } from '../ui/theme';
 
 interface Props {
   plan: WeekPlan;
@@ -107,13 +107,17 @@ export function WeekPlanScreen({
 
               {entries.length === 0 ? (
                 <Pressable onPress={() => setPickingFor(day)} style={s.emptyDay}>
-                  <Text style={s.emptyDayText}>frei</Text>
+                  <Text style={s.emptyDayIcon}>🪷</Text>
+                  <Text style={s.emptyDayText}>frei — tipp für ein Gericht</Text>
                 </Pressable>
               ) : (
                 entries.map((id) => {
                   const recipe = byId.get(id);
                   return (
                     <View key={`${day}-${id}`} style={s.meal}>
+                      <Text style={s.mealIcon}>
+                        {recipe ? recipeIcon(recipe.title) : '❓'}
+                      </Text>
                       <View style={s.mealBody}>
                         <Text style={s.mealTitle}>{recipe?.title ?? 'Unbekanntes Rezept'}</Text>
                         {recipe ? (
@@ -213,26 +217,33 @@ const s = StyleSheet.create({
   dayName: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text },
   addLink: { fontSize: 13, color: colors.primary, fontWeight: '600' },
 
+  // Freie Tage sind leere Seerosenblätter: gestrichelt und mit Symbol laden
+  // sie zum Antippen ein, statt wie eine graue Lücke auszusehen.
   emptyDay: {
-    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: 2,
     borderColor: colors.border,
     borderStyle: 'dashed',
-    borderRadius: radius.md,
+    borderRadius: radius.xl,
     paddingVertical: spacing.md,
-    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
   },
+  emptyDayIcon: { fontSize: 17 },
   emptyDayText: { color: colors.textFaint, fontSize: 13 },
 
   meal: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
+    backgroundColor: colors.surfaceWarm,
+    borderWidth: 2,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: radius.xl,
     padding: spacing.md,
   },
+  mealIcon: { fontSize: 24 },
   mealBody: { flex: 1 },
   mealTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
   mealMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },

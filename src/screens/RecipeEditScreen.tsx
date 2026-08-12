@@ -438,7 +438,7 @@ const s = StyleSheet.create({
   lookupRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 3 },
   lookupText: { fontSize: 12, color: colors.textMuted },
   found: { fontSize: 12, color: colors.primary, marginTop: 3 },
-  notFound: { fontSize: 12, color: colors.accent, marginTop: 3 },
+  notFound: { fontSize: 12, color: colors.alarm, marginTop: 3 },
   rowActions: { alignItems: 'flex-end', gap: spacing.sm },
   change: { fontSize: 12, color: colors.textMuted, textDecorationLine: 'underline' },
   remove: { fontSize: 15, color: colors.textFaint },
@@ -462,7 +462,7 @@ const s = StyleSheet.create({
   chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { fontSize: 13, color: colors.textMuted },
   chipTextOn: { color: '#fff', fontWeight: '600' },
-  staple: { fontSize: 12, color: colors.accent },
+  staple: { fontSize: 12, color: colors.alarm },
 
   empty: {
     textAlign: 'center',

@@ -121,12 +121,12 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   btnSecondary: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  btnDanger: { backgroundColor: colors.dangerBg },
+  btnDanger: { backgroundColor: colors.alarmBg },
   btnDisabled: { opacity: 0.4 },
   btnPressed: { opacity: 0.75 },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
   btnTextSecondary: { color: colors.text },
-  btnTextDanger: { color: colors.danger },
+  btnTextDanger: { color: colors.alarm },
 
   card: {
     backgroundColor: colors.surface,
@@ -143,7 +143,7 @@ const s = StyleSheet.create({
     marginHorizontal: spacing.xl,
     marginTop: spacing.md,
   },
-  noticeWarn: { backgroundColor: colors.dangerBg },
+  noticeWarn: { backgroundColor: colors.alarmBg },
   noticeText: { fontSize: 13, color: colors.textMuted, lineHeight: 19 },
-  noticeTextWarn: { color: colors.danger },
+  noticeTextWarn: { color: colors.alarm },
 });

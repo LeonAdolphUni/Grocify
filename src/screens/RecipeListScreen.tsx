@@ -139,7 +139,7 @@ const s = StyleSheet.create({
   meta: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
   action: { paddingHorizontal: spacing.xs, paddingVertical: spacing.xs },
   actionText: { fontSize: 13, color: colors.textMuted },
-  actionDanger: { color: colors.danger },
+  actionDanger: { color: colors.alarm },
   empty: { alignItems: 'center', paddingTop: 72, paddingHorizontal: spacing.xxl },
   emptyTitle: { fontSize: 17, fontWeight: '600', color: colors.text, marginBottom: spacing.sm },
   emptyText: { fontSize: 14, color: colors.textFaint, textAlign: 'center', lineHeight: 21 },

@@ -32,7 +32,9 @@ import { calculateStats, calculateTotal, type Product, type Recipe, type Shoppin
 import { formatQuantity } from '../domain/units';
 import { getProvider } from '../supermarkets/registry';
 import { Header, Notice, Screen } from '../ui/components';
-import { colors, euro, radius, spacing } from '../ui/theme';
+import { Kees, keesSays, moodForUtilization } from '../ui/Kees';
+import { Petals, Sunflower } from '../ui/Sunflower';
+import { categoryIcon, colors, euro, radius, spacing } from '../ui/theme';
 import { ProductSearchScreen } from './ProductSearchScreen';
 
 interface Props {
@@ -57,20 +59,6 @@ function groupByCategory(items: ShoppingListItem[]): [string, ShoppingListItem[]
   return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], 'nl'));
 }
 
-/** Balken, der einen Anteil zeigt — ohne Diagrammbibliothek. */
-function Bar({ value, tone }: { value: number; tone?: 'good' | 'warn' }) {
-  return (
-    <View style={s.barTrack}>
-      <View
-        style={[
-          s.barFill,
-          { width: `${Math.max(2, Math.min(100, value * 100))}%` },
-          tone === 'warn' && s.barWarn,
-        ]}
-      />
-    </View>
-  );
-}
 
 export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: Props) {
   const [list, setList] = useState<ShoppingList | null>(null);
@@ -226,7 +214,9 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
         contentContainerStyle={s.list}
         renderItem={({ item: [category, entries] }) => (
           <View style={s.group}>
-            <Text style={s.groupTitle}>{category}</Text>
+            <Text style={s.groupTitle}>
+              <Text style={s.groupIcon}>{categoryIcon(category)}</Text> {category}
+            </Text>
             {entries.map((entry) => {
               const key = itemKey(entry);
               const isChecked = checked.has(key);
@@ -258,7 +248,7 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
 
                     {entry.utilization !== undefined ? (
                       <View style={s.utilRow}>
-                        <Bar value={entry.utilization} tone={entry.utilization < 0.6 ? 'warn' : 'good'} />
+                        <Petals value={entry.utilization} />
                         <Text style={s.utilText}>
                           {Math.round(entry.utilization * 100)} %
                           {entry.leftover && entry.leftover.amount > 0
@@ -338,11 +328,11 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
                   </Text>
                 </View>
 
-                <View style={s.statCard}>
+                <View style={[s.statCard, s.statCardCenter]}>
                   <Text style={s.statHead}>Verwertung</Text>
+                  <Sunflower value={stats.utilization} size={144} />
                   {stats.utilization !== null ? (
                     <>
-                      <Bar value={stats.utilization} tone={stats.utilization < 0.7 ? 'warn' : 'good'} />
                       <Text style={s.statLine}>
                         {Math.round(stats.utilization * 100)} % von dem, was du kaufst, wird auch
                         verkocht.
@@ -355,6 +345,14 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
                   ) : (
                     <Text style={s.statMuted}>Nicht berechenbar für diese Liste.</Text>
                   )}
+
+                  {/* Kees urteilt — ein Satz statt einer Tabelle. */}
+                  <View style={s.kees}>
+                    <Kees size={62} mood={moodForUtilization(stats.utilization)} />
+                    <Text style={s.keesText}>
+                      {keesSays(moodForUtilization(stats.utilization), stats.leftoverValue)}
+                    </Text>
+                  </View>
                 </View>
 
                 <View style={s.statCard}>
@@ -440,6 +438,7 @@ const s = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.7,
   },
+  groupIcon: { fontSize: 15 },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -469,28 +468,19 @@ const s = StyleSheet.create({
   itemTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
   struck: { textDecorationLine: 'line-through' },
   itemMeta: { fontSize: 12, color: colors.textMuted, marginTop: 3 },
-  itemNote: { fontSize: 11, color: colors.accent, marginTop: 3, lineHeight: 16 },
+  itemNote: { fontSize: 11, color: colors.alarm, marginTop: 3, lineHeight: 16 },
 
-  utilRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
-  barTrack: {
-    flex: 1,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#ececea',
-    overflow: 'hidden',
-  },
-  barFill: { height: '100%', backgroundColor: colors.primary },
-  barWarn: { backgroundColor: colors.accent },
-  utilText: { fontSize: 11, color: colors.textFaint, minWidth: 96 },
+  utilRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  utilText: { fontSize: 11, color: colors.textFaint, marginTop: spacing.xs },
 
   right: { alignItems: 'flex-end', minWidth: 62, gap: 3 },
   price: { fontSize: 15, fontWeight: '700', color: colors.primary },
-  missing: { fontSize: 12, color: colors.danger, fontWeight: '600' },
+  missing: { fontSize: 12, color: colors.alarm, fontWeight: '600' },
   bonus: {
     fontSize: 9,
     fontWeight: '700',
     color: '#fff',
-    backgroundColor: colors.accent,
+    backgroundColor: colors.alarm,
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
@@ -529,6 +519,18 @@ const s = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.sm,
   },
+  statCardCenter: { alignItems: 'center' },
+  kees: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.successBg,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+    alignSelf: 'stretch',
+  },
+  keesText: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.text, lineHeight: 20 },
   statBig: { fontSize: 34, fontWeight: '700', color: colors.primary },
   statBigLabel: { fontSize: 13, color: colors.textMuted },
   statHead: {
@@ -543,6 +545,6 @@ const s = StyleSheet.create({
   statRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   statKey: { fontSize: 13, color: colors.textMuted },
   statVal: { fontSize: 14, fontWeight: '600', color: colors.text },
-  statBad: { color: colors.danger },
+  statBad: { color: colors.alarm },
   statFoot: { fontSize: 12, color: colors.textFaint, lineHeight: 18, paddingHorizontal: spacing.xs },
 });
