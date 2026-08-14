@@ -1,20 +1,17 @@
 /**
  * Grocify — Einstiegspunkt und Navigation.
  *
- * Startbildschirm ist der Wochenplan. Von dort führen zwei Wege weg:
- * Rezepte verwalten, oder aus der geplanten Woche eine Einkaufsliste bauen.
- *
- * Die Navigation ist bewusst ein einfacher Zustand statt einer Bibliothek.
- * Sobald echte URLs, Deep Links oder Tabs dazukommen, ist der Umstieg auf
- * expo-router fällig — dann ist diese Datei die einzige Stelle, die sich
- * ändert.
+ * Die Daten liegen im Backend, nicht mehr im Browser. Das bedeutet auch:
+ * Ohne laufenden Server gibt es nichts anzuzeigen. Statt einen leeren
+ * Bildschirm zu zeigen und den Nutzer rätseln zu lassen, sagt die App dann
+ * klar, was fehlt und wie man es startet.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
-import { createDemoRecipe, createDemoRecipes, createDemoWeekPlan } from './src/domain/demoRecipe';
+import { ApiError, api } from './src/api/client';
 import type { Recipe } from './src/domain/types';
 import { emptyWeek, recipesInPlan, type WeekPlan, type Weekday } from './src/domain/weekPlan';
 import { RecipeEditScreen } from './src/screens/RecipeEditScreen';
@@ -22,15 +19,13 @@ import { RecipeListScreen } from './src/screens/RecipeListScreen';
 import { ShoppingListScreen } from './src/screens/ShoppingListScreen';
 import { SupermarketScreen } from './src/screens/SupermarketScreen';
 import { WeekPlanScreen } from './src/screens/WeekPlanScreen';
-import { deleteRecipe, loadRecipes, newId, saveRecipes, upsertRecipe } from './src/storage/recipeStore';
-import { loadWeekPlan, saveWeekPlan } from './src/storage/weekPlanStore';
-import { colors } from './src/ui/theme';
+import { Kees } from './src/ui/Kees';
+import { colors, radius, spacing } from './src/ui/theme';
 
 type Route =
   | { name: 'week' }
   | { name: 'recipes' }
   | { name: 'edit'; recipeId?: string }
-  /** Die Einkaufsliste kann aus dem Wochenplan oder aus einer Auswahl kommen. */
   | { name: 'supermarket'; source: Recipe[] }
   | { name: 'list'; source: Recipe[]; providerId: string };
 
@@ -39,75 +34,101 @@ export default function App() {
   const [plan, setPlan] = useState<WeekPlan>(() => emptyWeek('week-1'));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [route, setRoute] = useState<Route>({ name: 'week' });
-  const [ready, setReady] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [fatal, setFatal] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      const [loadedRecipes, loadedPlan] = await Promise.all([loadRecipes(), loadWeekPlan()]);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setFatal(null);
+    try {
+      const [loadedRecipes, loadedPlan] = await Promise.all([
+        api.listRecipes(),
+        api.getWeekPlan(),
+      ]);
       setRecipes(loadedRecipes);
-      if (loadedPlan) setPlan(loadedPlan);
-      setReady(true);
-    })();
+      setPlan(loadedPlan);
+    } catch (err) {
+      setFatal(
+        err instanceof ApiError
+          ? err.message
+          : `Unerwarteter Fehler: ${(err as Error).message}`,
+      );
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  /** Plan ändern und sofort sichern — der Nutzer soll nichts speichern müssen. */
-  const updatePlan = useCallback((next: WeekPlan) => {
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  /**
+   * Ändert den Plan sofort in der Oberfläche und schickt ihn ans Backend.
+   *
+   * Optimistisch: Der Nutzer soll nicht auf das Netz warten, um einen Tag
+   * zu belegen. Schlägt das Speichern fehl, wird der Server als Quelle der
+   * Wahrheit genommen und der Zustand zurückgeholt.
+   */
+  const updatePlan = useCallback(async (next: WeekPlan) => {
     setPlan(next);
-    void saveWeekPlan(next);
+    try {
+      setPlan(await api.saveWeekPlan(next));
+    } catch {
+      try {
+        setPlan(await api.getWeekPlan());
+      } catch {
+        // Backend ganz weg — der nächste Vollstart meldet es deutlich.
+      }
+    }
   }, []);
 
   const addToDay = useCallback(
-    (day: Weekday, recipeId: string) => {
-      updatePlan({ ...plan, days: { ...plan.days, [day]: [...plan.days[day], recipeId] } });
-    },
+    (day: Weekday, recipeId: string) =>
+      void updatePlan({ ...plan, days: { ...plan.days, [day]: [...plan.days[day], recipeId] } }),
     [plan, updatePlan],
   );
 
   const removeFromDay = useCallback(
     (day: Weekday, recipeId: string) => {
-      // Nur das erste Vorkommen entfernen: Dasselbe Gericht darf an einem Tag
-      // zweimal stehen (doppelte Portionen), und dann soll ein Tipp auch nur
-      // eines davon löschen.
       const index = plan.days[day].indexOf(recipeId);
       if (index < 0) return;
       const next = [...plan.days[day]];
       next.splice(index, 1);
-      updatePlan({ ...plan, days: { ...plan.days, [day]: next } });
+      void updatePlan({ ...plan, days: { ...plan.days, [day]: next } });
     },
     [plan, updatePlan],
   );
 
-  const loadDemoWeek = useCallback(async () => {
-    const demoRecipes = createDemoRecipes();
-    // Vorhandene Rezepte bleiben erhalten; die Beispielrezepte haben feste
-    // IDs und ersetzen sich selbst, wenn man die Woche zweimal lädt.
-    const existing = (await loadRecipes()).filter(
-      (r) => !demoRecipes.some((d) => d.id === r.id),
-    );
-    const merged = [...existing, ...demoRecipes];
-    await saveRecipes(merged);
-    setRecipes(merged);
-    updatePlan(createDemoWeekPlan(plan.id));
-  }, [plan.id, updatePlan]);
+  const clearWeek = useCallback(
+    () => void updatePlan(emptyWeek(plan.id, plan.name)),
+    [plan.id, plan.name, updatePlan],
+  );
 
-  const clearWeek = useCallback(() => {
-    updatePlan(emptyWeek(plan.id, plan.name));
-  }, [plan.id, plan.name, updatePlan]);
-
-  const handleSave = useCallback(async (recipe: Recipe) => {
-    setRecipes(await upsertRecipe(recipe));
-    setRoute({ name: 'recipes' });
-  }, []);
+  const handleSave = useCallback(
+    async (recipe: Recipe) => {
+      try {
+        await api.saveRecipe(recipe);
+        setRecipes(await api.listRecipes());
+        setRoute({ name: 'recipes' });
+      } catch (err) {
+        setFatal(err instanceof ApiError ? err.message : (err as Error).message);
+      }
+    },
+    [],
+  );
 
   const handleDelete = useCallback(async (id: string) => {
-    setRecipes(await deleteRecipe(id));
-    setSelectedIds((ids) => ids.filter((x) => x !== id));
-  }, []);
-
-  const handleLoadDemoRecipe = useCallback(async () => {
-    const demo = createDemoRecipe(newId());
-    setRecipes(await upsertRecipe(demo));
-    setSelectedIds([demo.id]);
+    try {
+      await api.deleteRecipe(id);
+      // Der Wochenplan kann das Rezept enthalten haben — beide Stände neu
+      // holen statt zu raten, was das Backend daraus gemacht hat.
+      const [nextRecipes, nextPlan] = await Promise.all([api.listRecipes(), api.getWeekPlan()]);
+      setRecipes(nextRecipes);
+      setPlan(nextPlan);
+      setSelectedIds((ids) => ids.filter((x) => x !== id));
+    } catch (err) {
+      setFatal(err instanceof ApiError ? err.message : (err as Error).message);
+    }
   }, []);
 
   const planRecipes = useMemo(() => recipesInPlan(plan, recipes), [plan, recipes]);
@@ -116,11 +137,30 @@ export default function App() {
     [recipes, selectedIds],
   );
 
-  if (!ready) {
+  if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center' }}>
+      <View style={s.center}>
         <StatusBar style="dark" />
         <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  if (fatal) {
+    return (
+      <View style={s.center}>
+        <StatusBar style="dark" />
+        <View style={s.errorBox}>
+          <Kees size={72} mood="meh" />
+          <Text style={s.errorTitle}>Kein Zugriff auf deine Daten</Text>
+          <Text style={s.errorText}>{fatal}</Text>
+          <View style={s.codeBox}>
+            <Text style={s.code}>npm run server</Text>
+          </View>
+          <Pressable onPress={() => void load()} style={({ pressed }) => [s.retry, pressed && s.pressed]}>
+            <Text style={s.retryText}>Nochmal versuchen</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -135,7 +175,6 @@ export default function App() {
           recipes={recipes}
           onAddRecipe={addToDay}
           onRemoveRecipe={removeFromDay}
-          onLoadDemoWeek={loadDemoWeek}
           onClearWeek={clearWeek}
           onManageRecipes={() => setRoute({ name: 'recipes' })}
           onBuildList={() => setRoute({ name: 'supermarket', source: planRecipes })}
@@ -155,7 +194,6 @@ export default function App() {
           onEdit={(recipeId) => setRoute({ name: 'edit', recipeId })}
           onDelete={handleDelete}
           onContinue={() => setRoute({ name: 'supermarket', source: selectedRecipes })}
-          onLoadDemo={handleLoadDemoRecipe}
           onBack={() => setRoute({ name: 'week' })}
         />
       )}
@@ -187,3 +225,31 @@ export default function App() {
     </>
   );
 }
+
+const s = StyleSheet.create({
+  center: { flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' },
+  errorBox: {
+    alignItems: 'center',
+    gap: spacing.md,
+    maxWidth: 420,
+    padding: spacing.xl,
+  },
+  errorTitle: { fontSize: 19, fontWeight: '700', color: colors.text },
+  errorText: { fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 21 },
+  codeBox: {
+    backgroundColor: colors.text,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  code: { color: colors.sunSoft, fontSize: 14, fontFamily: 'monospace' },
+  retry: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm,
+  },
+  pressed: { opacity: 0.75 },
+  retryText: { color: colors.onDark, fontWeight: '700', fontSize: 15 },
+});

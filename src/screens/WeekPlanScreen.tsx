@@ -29,7 +29,6 @@ interface Props {
   recipes: Recipe[];
   onAddRecipe: (day: Weekday, recipeId: string) => void;
   onRemoveRecipe: (day: Weekday, recipeId: string) => void;
-  onLoadDemoWeek: () => void;
   onClearWeek: () => void;
   onManageRecipes: () => void;
   onBuildList: () => void;
@@ -40,7 +39,6 @@ export function WeekPlanScreen({
   recipes,
   onAddRecipe,
   onRemoveRecipe,
-  onLoadDemoWeek,
   onClearWeek,
   onManageRecipes,
   onBuildList,
@@ -80,13 +78,18 @@ export function WeekPlanScreen({
               etwas übrig bleibt.
             </Text>
             <View style={s.introActions}>
-              <Button label="Beispielwoche laden" onPress={onLoadDemoWeek} />
               {recipes.length === 0 ? (
+                <>
+                  <Button label="Erstes Rezept anlegen" onPress={onManageRecipes} />
+                  <Text style={s.introHint}>
+                    Danach kannst du es hier auf einen Tag legen.
+                  </Text>
+                </>
+              ) : (
                 <Text style={s.introHint}>
-                  Lädt sieben aufeinander abgestimmte Rezepte — Tomaten, Sahne
-                  und Champignons gehen dabei über je zwei Tage auf.
+                  Tippe bei einem Tag auf „+ Gericht", um zu beginnen.
                 </Text>
-              ) : null}
+              )}
             </View>
           </Card>
         ) : null}

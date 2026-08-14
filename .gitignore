@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Datenbank des Backends — deine Rezepte gehoeren dir, nicht dem Repo
+server/data/

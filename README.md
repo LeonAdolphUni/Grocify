@@ -9,6 +9,10 @@ Gesamtpreis des Einkaufs.
 
 ## Stand
 
+Die App startet **leer** — mit deinen eigenen Daten aus der Datenbank. Die
+früheren Beispielrezepte sind entfernt; als feste Vorlage für die Messungen
+liegen sie noch unter `scripts/fixtures.ts` und werden nie ausgeliefert.
+
 Der komplette Ablauf funktioniert Ende zu Ende:
 
 **Rezepte** (anlegen, bearbeiten, mehrere auswählen) → **Supermarkt wählen**
@@ -83,16 +87,63 @@ Was das nicht kann, und zwar prinzipiell nicht:
 Die belastbare Lösung ist die semantische Zuordnung über die Claude API in
 Sprint 6/7. Die Heuristik ist explizit eine Brücke bis dahin.
 
+## Aufbau
+
+Zwei Teile, zwei Prozesse:
+
+```
+server/          Backend — HTTP-API und SQLite-Datenbank
+  db.ts          Schema und Datenzugriff
+  api.ts         Routen
+  index.ts       Einstiegspunkt
+  data/          die Datenbankdatei (nicht im Repo)
+src/             Frontend — die App
+  api/client.ts  spricht mit dem Backend
+```
+
+Die Daten liegen in **einer SQLite-Datei** unter `server/data/grocify.db`.
+Das ist eine echte relationale Datenbank — Rezepte, Zutaten und Wochenplan
+liegen in getrennten Tabellen mit Fremdschlüsseln. Sie läuft über
+`node:sqlite`, das seit Node 22.5 eingebaut ist: **keine externe
+Abhängigkeit, keine native Kompilierung, kein Datenbankdienst, kein
+Docker.**
+
 ## Setup
 
-Voraussetzung: Node 20+ (getestet mit Node 24).
+Voraussetzung: Node 22.5+ (getestet mit Node 24) — ältere Versionen haben
+`node:sqlite` noch nicht.
 
 ```bash
 npm install
-npm run web        # Web-App im Browser — der aktuelle Hauptweg
-npm run smoke      # Albert-Heijn-Anbindung ohne App/Browser testen
-npm run typecheck  # TypeScript prüfen
 ```
+
+Dann **zwei Terminals**:
+
+```bash
+npm run server     # Terminal 1 — Backend auf Port 4000
+npm run web        # Terminal 2 — App auf Port 8081/8082
+```
+
+Läuft das Backend nicht, sagt die App das beim Start deutlich und bietet
+einen Wiederholen-Knopf — statt einen leeren Bildschirm zu zeigen.
+
+```bash
+npm run smoke:api    # Backend Ende zu Ende (eigene Wegwerf-Datenbank)
+npm run smoke        # Albert-Heijn-Anbindung
+npm run smoke:parse  # Zutaten-Parser
+npm run typecheck    # TypeScript prüfen
+```
+
+### Die API
+
+| Route | Zweck |
+|---|---|
+| `GET /api/health` | Läuft der Server, und was steht drin? |
+| `GET /api/recipes` | Alle Rezepte samt Zutaten |
+| `PUT /api/recipes/:id` | Anlegen oder ändern |
+| `DELETE /api/recipes/:id` | Löschen — räumt auch den Wochenplan auf |
+| `GET /api/week-plan` | Der Wochenplan |
+| `PUT /api/week-plan` | Wochenplan speichern |
 
 `npm run web` startet den Dev-Server auf http://localhost:8081 und öffnet den
 Browser. Ist der Port belegt, weicht Expo auf 8082 aus — im nicht-interaktiven

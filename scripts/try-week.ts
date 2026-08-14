@@ -12,7 +12,7 @@
  * hier gemessen statt behauptet.
  */
 
-import { createDemoRecipes } from '../src/domain/demoRecipe';
+import { TEST_RECIPES } from './fixtures';
 import { suggestRecipesForLeftovers } from '../src/domain/leftoverUse';
 import { buildShoppingList } from '../src/domain/shoppingList';
 import { calculateStats } from '../src/domain/types';
@@ -23,7 +23,7 @@ const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v * 100)} 
 
 async function main() {
   const ah = new AlbertHeijnProvider();
-  const recipes = createDemoRecipes();
+  const recipes = TEST_RECIPES;
 
   // a) Jeder Abend für sich eingekauft
   let separateTotal = 0;

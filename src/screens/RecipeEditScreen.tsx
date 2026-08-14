@@ -28,7 +28,7 @@ import { findProductFor } from '../domain/shoppingList';
 import { isPantryStaple, normalizeKey, toDutchSearchTerm } from '../domain/translate';
 import type { Ingredient, PinnedProduct, Product, Recipe } from '../domain/types';
 import { formatQuantity, type Unit } from '../domain/units';
-import { newId } from '../storage/recipeStore';
+import { newId } from '../domain/id';
 import { getProvider, SEARCH_PROVIDER_ID } from '../supermarkets/registry';
 import { Button, Card, Header, Screen } from '../ui/components';
 import { colors, euro, radius, spacing } from '../ui/theme';

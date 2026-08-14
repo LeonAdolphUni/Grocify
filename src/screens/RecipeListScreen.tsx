@@ -20,7 +20,6 @@ interface Props {
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onContinue: () => void;
-  onLoadDemo: () => void;
   onBack: () => void;
 }
 
@@ -32,7 +31,6 @@ export function RecipeListScreen({
   onEdit,
   onDelete,
   onContinue,
-  onLoadDemo,
   onBack,
 }: Props) {
   const selectedCount = selectedIds.length;
@@ -58,20 +56,12 @@ export function RecipeListScreen({
           <View style={s.empty}>
             <Text style={s.emptyTitle}>Leg dein erstes Rezept an</Text>
             <Text style={s.emptyText}>
-              Titel, Portionen und Zutaten eintragen — daraus wird gleich eine
-              Einkaufsliste mit echten Preisen.
+              Tippe oben rechts auf „+ Neu". Zutaten schreibst du einfach hin —
+              „Milch 0,5 l" reicht, das Produkt sucht die App selbst.
             </Text>
 
             <View style={s.emptyAction}>
-              <Button
-                label="Beispielrezept laden"
-                variant="secondary"
-                onPress={onLoadDemo}
-              />
-              <Text style={s.emptyHint}>
-                Spaghetti Bolognese, 11 Zutaten — zum Ausprobieren, jederzeit
-                wieder löschbar.
-              </Text>
+              <Button label="Erstes Rezept anlegen" onPress={onCreate} />
             </View>
           </View>
         }
