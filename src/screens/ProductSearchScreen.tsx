@@ -144,7 +144,7 @@ export function ProductSearchScreen({ providerId, initialQuery = '', onPick, onC
 
   return (
     <Screen>
-      <Header title="Produkt wählen" subtitle={subtitle} onBack={goBack} />
+      <Header title="Produkt wählen" subtitle={subtitle} onBack={goBack} tone="sun" />
 
       <View style={s.searchBar}>
         <TextInput

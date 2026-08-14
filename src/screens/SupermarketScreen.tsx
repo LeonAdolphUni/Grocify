@@ -27,7 +27,7 @@ export function SupermarketScreen({ recipes, onSelect, onBack }: Props) {
       <Header
         title="Wo kaufst du ein?"
         subtitle={`${recipes.length} ${recipes.length === 1 ? 'Rezept' : 'Rezepte'} · ${ingredientCount} Zutaten`}
-        onBack={onBack}
+        onBack={onBack} tone="pond"
       />
 
       <ScrollView contentContainerStyle={s.body}>

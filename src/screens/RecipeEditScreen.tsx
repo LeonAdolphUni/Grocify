@@ -216,7 +216,7 @@ export function RecipeEditScreen({ recipe, onSave, onCancel }: Props) {
       <Header
         title={recipe ? 'Rezept bearbeiten' : 'Neues Rezept'}
         subtitle={`${filled.length} ${filled.length === 1 ? 'Zutat' : 'Zutaten'}`}
-        onBack={onCancel}
+        onBack={onCancel} tone="sun"
       />
 
       <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">

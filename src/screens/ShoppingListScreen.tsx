@@ -33,6 +33,7 @@ import { formatQuantity } from '../domain/units';
 import { getProvider } from '../supermarkets/registry';
 import { Header, Notice, Screen } from '../ui/components';
 import { Kees, keesSays, moodForUtilization } from '../ui/Kees';
+import { Hop, SeedBurst, SinkIn } from '../ui/motion';
 import { Petals, Sunflower } from '../ui/Sunflower';
 import { categoryIcon, colors, euro, radius, spacing } from '../ui/theme';
 import { ProductSearchScreen } from './ProductSearchScreen';
@@ -96,13 +97,26 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
     };
   }, [recipes, provider, providerId]);
 
-  const toggle = (key: string) =>
+  /** Zählt hoch bei jedem Abhaken — löst den Sprung der Blüte aus. */
+  const [tick, setTick] = useState(0);
+  /** Zählt hoch, wenn die Liste vollständig wird — löst den Samenflug aus. */
+  const [finished, setFinished] = useState(0);
+
+  const toggle = (key: string) => {
     setChecked((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
+
+      // Alles erledigt? Dann einmal feiern. Bewusst nur beim Übergang,
+      // nicht bei jedem weiteren Antippen.
+      if (list && next.size === list.items.length && prev.size < list.items.length) {
+        setFinished((n) => n + 1);
+      }
       return next;
     });
+    setTick((n) => n + 1);
+  };
 
   /** Ersetzt das Produkt einer Zeile und rechnet Preis und Rest neu. */
   const applySwap = useCallback(
@@ -173,32 +187,35 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
     <Screen>
       <Header
         title="Einkaufsliste"
-        subtitle={`${provider?.displayName} · ${doneCount} von ${list.items.length} erledigt`}
+        subtitle={provider?.displayName}
         onBack={onBack}
-      />
+        tone="pond"
+        extra={
+          /* Die Blüte öffnet sich mit dem Einkauf: ein Blatt je erledigter
+             Position. Sie springt bei jedem Häkchen kurz hoch. */
+          <Pressable onPress={() => setStatsOpen(true)} style={s.summary}>
+            <Hop trigger={tick}>
+              <Sunflower
+                value={list.items.length ? doneCount / list.items.length : 0}
+                petalCount={Math.min(12, Math.max(6, list.items.length))}
+                size={78}
+                label={`${doneCount}/${list.items.length}`}
+              />
+            </Hop>
 
-      {/* Kopfzeile mit den drei Zahlen, die zählen */}
-      <Pressable onPress={() => setStatsOpen(true)} style={s.summary}>
-        <View style={s.summaryCell}>
-          <Text style={s.summaryValue}>{euro(list.total)}</Text>
-          <Text style={s.summaryLabel}>Gesamt</Text>
-        </View>
-        <View style={s.summaryDivider} />
-        <View style={s.summaryCell}>
-          <Text style={s.summaryValue}>
-            {stats.pricePerServing !== null ? euro(stats.pricePerServing) : '—'}
-          </Text>
-          <Text style={s.summaryLabel}>je Portion</Text>
-        </View>
-        <View style={s.summaryDivider} />
-        <View style={s.summaryCell}>
-          <Text style={s.summaryValue}>
-            {stats.utilization !== null ? `${Math.round(stats.utilization * 100)} %` : '—'}
-          </Text>
-          <Text style={s.summaryLabel}>verwertet</Text>
-        </View>
-        <Text style={s.summaryMore}>›</Text>
-      </Pressable>
+            <View style={s.summaryNumbers}>
+              <Text style={s.summaryTotal}>{euro(list.total)}</Text>
+              <Text style={s.summaryLine}>
+                {stats.pricePerServing !== null ? `${euro(stats.pricePerServing)} je Portion` : '—'}
+                {stats.utilization !== null
+                  ? ` · ${Math.round(stats.utilization * 100)} % verwertet`
+                  : ''}
+              </Text>
+              <Text style={s.summaryHint}>Antippen für die Statistik ›</Text>
+            </View>
+          </Pressable>
+        }
+      />
 
       {stats.unmatched > 0 ? (
         <Notice tone="warn">
@@ -221,7 +238,8 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
               const key = itemKey(entry);
               const isChecked = checked.has(key);
               return (
-                <View key={key} style={[s.item, isChecked && s.itemChecked]}>
+                <SinkIn key={key} active={isChecked}>
+                <View style={s.item}>
                   <Pressable onPress={() => toggle(key)} style={s.checkArea} hitSlop={6}>
                     <View style={[s.box, isChecked && s.boxOn]}>
                       {isChecked ? <Text style={s.boxMark}>✓</Text> : null}
@@ -273,6 +291,7 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
                     </Pressable>
                   </View>
                 </View>
+                </SinkIn>
               );
             })}
           </View>
@@ -393,6 +412,9 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
         </Screen>
       </Modal>
 
+      {/* Alles abgehakt — die Blüte pustet ihre Kerne über den Bildschirm */}
+      <SeedBurst trigger={finished} />
+
       {/* Produkt tauschen */}
       <Modal visible={swapping !== null} animationType="slide" onRequestClose={() => setSwapping(null)}>
         {swapping ? (
@@ -415,19 +437,13 @@ const s = StyleSheet.create({
   summary: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.md,
+    gap: spacing.md,
+    marginTop: spacing.md,
   },
-  summaryCell: { flex: 1, alignItems: 'center' },
-  summaryValue: { fontSize: 17, fontWeight: '700', color: colors.primary },
-  summaryLabel: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
-  summaryDivider: { width: 1, height: 28, backgroundColor: colors.border },
-  summaryMore: { fontSize: 20, color: colors.textFaint, paddingHorizontal: spacing.sm },
+  summaryNumbers: { flex: 1 },
+  summaryTotal: { fontSize: 30, fontWeight: '800', color: colors.onDark, letterSpacing: -0.8 },
+  summaryLine: { fontSize: 13, color: 'rgba(244,251,239,0.82)', marginTop: 2 },
+  summaryHint: { fontSize: 11, color: 'rgba(244,251,239,0.55)', marginTop: spacing.xs },
 
   list: { padding: spacing.lg, gap: spacing.xl },
   group: { gap: spacing.sm },

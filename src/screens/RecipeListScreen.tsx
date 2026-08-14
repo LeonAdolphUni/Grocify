@@ -38,6 +38,7 @@ export function RecipeListScreen({
   return (
     <Screen>
       <Header
+        tone="pond"
         title="Rezepte"
         subtitle={
           recipes.length === 0

@@ -16,31 +16,59 @@ export function Screen({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Kopfbereich eines Bildschirms.
+ *
+ * `tone` bestimmt den Grund: „plain" für die alte helle Variante, „pond"
+ * für ein tiefgrünes Band, „sun" für ein gelbes. Die farbigen Bänder geben
+ * jedem Bildschirm sofort einen Charakter — und mit `extra` lässt sich
+ * etwas hineinlegen, das auf dem Band liegen soll statt darunter.
+ */
 export function Header({
   title,
   subtitle,
   onBack,
   right,
+  tone = 'plain',
+  extra,
 }: {
   title: string;
   subtitle?: string;
   onBack?: () => void;
   right?: ReactNode;
+  tone?: 'plain' | 'pond' | 'sun';
+  extra?: ReactNode;
 }) {
+  const banded = tone !== 'plain';
+  const onSun = tone === 'sun';
+
   return (
-    <View style={s.header}>
+    <View
+      style={[
+        s.header,
+        tone === 'pond' && s.headerPond,
+        tone === 'sun' && s.headerSun,
+      ]}
+    >
       {onBack ? (
         <Pressable onPress={onBack} style={s.back} hitSlop={10}>
-          <Text style={s.backText}>‹ Zurück</Text>
+          <Text style={[s.backText, banded && (onSun ? s.onSunSoft : s.onPondSoft)]}>
+            ‹ Zurück
+          </Text>
         </Pressable>
       ) : null}
       <View style={s.headerRow}>
         <View style={s.headerText}>
-          <Text style={s.title}>{title}</Text>
-          {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
+          <Text style={[s.title, banded && (onSun ? s.onSunTitle : s.onPondTitle)]}>{title}</Text>
+          {subtitle ? (
+            <Text style={[s.subtitle, banded && (onSun ? s.onSunSoft : s.onPondSoft)]}>
+              {subtitle}
+            </Text>
+          ) : null}
         </View>
         {right}
       </View>
+      {extra}
     </View>
   );
 }
@@ -105,6 +133,28 @@ const s = StyleSheet.create({
   },
   container: { flex: 1, width: '100%', maxWidth: CONTENT_MAX_WIDTH, alignSelf: 'center' },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
+  // Farbige Kopfbänder ziehen sich über die volle Breite und geben jedem
+  // Bildschirm sofort einen Charakter.
+  headerPond: {
+    backgroundColor: colors.primaryDeep,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
+    marginBottom: spacing.sm,
+  },
+  headerSun: {
+    backgroundColor: colors.sun,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
+    marginBottom: spacing.sm,
+  },
+  onPondTitle: { color: colors.onDark },
+  onPondSoft: { color: 'rgba(244,251,239,0.78)' },
+  onSunTitle: { color: '#3a2a00' },
+  onSunSoft: { color: 'rgba(58,42,0,0.72)' },
   back: { paddingVertical: spacing.xs, marginBottom: spacing.xs },
   backText: { color: colors.textMuted, fontSize: 15 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

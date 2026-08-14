@@ -67,6 +67,7 @@ export function WeekPlanScreen({
             : `${days} ${days === 1 ? 'Tag' : 'Tage'} · ${meals} ${meals === 1 ? 'Gericht' : 'Gerichte'} · ${servings} Portionen`
         }
         onBack={onBack}
+        tone="pond"
         right={<Button label="Rezepte" variant="secondary" onPress={onManageRecipes} />}
       />
 
@@ -170,8 +171,7 @@ export function WeekPlanScreen({
           <ScrollView contentContainerStyle={s.pickBody}>
             {recipes.length === 0 ? (
               <Text style={s.pickEmpty}>
-                Noch keine Rezepte vorhanden. Leg über „Rezepte" eines an oder
-                lade die Beispielwoche.
+                Noch keine Rezepte vorhanden. Leg über „Rezepte" eines an.
               </Text>
             ) : (
               recipes.map((r) => (
