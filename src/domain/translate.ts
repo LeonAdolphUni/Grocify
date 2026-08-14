@@ -83,6 +83,16 @@ export const DE_TO_NL: Record<string, string> = {
   aubergine: 'aubergine',
   zucchini: 'courgette',
   salat: 'sla',
+  kuerbis: 'pompoen',
+  hokkaidokuerbis: 'hokkaido pompoen',
+  erbsen: 'erwten',
+  bohnen: 'bonen',
+  mais: 'mais',
+  rucola: 'rucola',
+  fenchel: 'venkel',
+  rotkohl: 'rodekool',
+  weisskohl: 'witte kool',
+  ingwer: 'gember',
 
   // Kräuter
   petersilie: 'peterselie',

@@ -166,19 +166,39 @@ export function chooseBestProduct(
   const available = candidates.filter((p) => p.isAvailable && p.price > 0);
   let pool = available.length > 0 ? available : candidates;
 
-  if (searchTerm) {
+  // Der Begriff, nach dem am Ende tatsächlich bewertet wird. Kann vom
+  // Suchbegriff abweichen, siehe Rückfall aufs Grundwort weiter unten.
+  let term = searchTerm;
+
+  if (term) {
     // Erst die Trefferstufe: Ein eigenständiges Wort schlägt jedes
     // Kompositum. Das trennt „Witte champignons" von „Champignonsoep",
     // ohne „Gele uien" gegen „ui" zu benachteiligen — Plural zählt als
     // dasselbe Wort.
-    const bestTier = Math.min(...pool.map((p) => matchTier(p.title, searchTerm)));
+    let bestTier = Math.min(...pool.map((p) => matchTier(p.title, term)));
+
+    // Findet kein einziges Produkt den ganzen Begriff, wird auf das
+    // Grundwort zurückgefallen — im Niederländischen steht es hinten:
+    // „hokkaido pompoen" → „pompoen". Ohne das bliebe die Auswahl
+    // *ungefiltert*, und dann gewinnt schlicht das billigste Suchergebnis.
+    // Genau so landeten für „hokkaido pompoen" Kürbisbrötchen im Korb.
+    const words = wordsOf(term);
+    if (bestTier === 3 && words.length > 1) {
+      const head = words.at(-1)!;
+      const headTier = Math.min(...pool.map((p) => matchTier(p.title, head)));
+      if (headTier < 3) {
+        term = head;
+        bestTier = headTier;
+      }
+    }
+
     if (bestTier < 3) {
-      const sameTier = pool.filter((p) => matchTier(p.title, searchTerm) === bestTier);
+      const sameTier = pool.filter((p) => matchTier(p.title, term) === bestTier);
       // Dann die Zusatzwörter: „AH Tomaten" schlägt „AH Tomaten gepeld",
       // frisch schlägt Dose. Keine Toleranz — schon ein Wort verschiebt
       // die Bedeutung.
-      const minExtra = Math.min(...sameTier.map((p) => extraWordCount(p.title, searchTerm)));
-      pool = sameTier.filter((p) => extraWordCount(p.title, searchTerm) === minExtra);
+      const minExtra = Math.min(...sameTier.map((p) => extraWordCount(p.title, term)));
+      pool = sameTier.filter((p) => extraWordCount(p.title, term) === minExtra);
     }
   }
 
@@ -201,7 +221,7 @@ export function chooseBestProduct(
     const { packages, total } = score(product);
     // Stichentscheid bei gleich vielen Zusatzwörtern: das eigenständige Wort
     // gewinnt gegen das Kompositum — „Knoflook" statt „Knoflooksaus".
-    const tier = searchTerm ? matchTier(product.title, searchTerm) : 0;
+    const tier = term ? matchTier(product.title, term) : 0;
 
     const better = !best || tier < bestTier || (tier === bestTier && total < best.total);
     if (better) {

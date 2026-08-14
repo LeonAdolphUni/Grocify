@@ -71,6 +71,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** Ein Suchtreffer beim Import. */
+export interface ImportHit {
+  id: string;
+  title: string;
+  subtitle?: string;
+  imageUrl?: string;
+  rating?: number;
+  ratingCount?: number;
+  preparationTime?: number;
+  siteUrl?: string;
+}
+
+/** Ergebnis eines Imports. */
+export interface ImportResult {
+  recipe: Recipe;
+  /** War schon da — es wurde nichts überschrieben und nichts doppelt angelegt. */
+  alreadyInBook: boolean;
+}
+
 export const api = {
   /** Prüft, ob das Backend erreichbar ist. */
   health: () =>
@@ -93,4 +112,12 @@ export const api = {
 
   saveWeekPlan: (plan: WeekPlan) =>
     request<WeekPlan>('/week-plan', { method: 'PUT', body: JSON.stringify(plan) }),
+
+  /** Rezepte bei Chefkoch suchen. Läuft über das Backend, nicht im Browser. */
+  searchImport: (query: string) =>
+    request<ImportHit[]>(`/import/search?q=${encodeURIComponent(query)}`),
+
+  /** Übernimmt ein gefundenes Rezept ins eigene Buch. */
+  importRecipe: (chefkochId: string) =>
+    request<ImportResult>(`/import/${encodeURIComponent(chefkochId)}`, { method: 'POST' }),
 };

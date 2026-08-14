@@ -15,6 +15,7 @@
     "smoke:api": "tsx scripts/smoke-api.ts",
     "check:dict": "tsx scripts/check-dictionary.ts",
     "try:week": "tsx scripts/try-week.ts",
+    "try:import": "tsx scripts/try-import.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

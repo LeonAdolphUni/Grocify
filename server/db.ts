@@ -196,6 +196,20 @@ export class GrocifyDb {
     return this.getRecipe(recipe.id)!;
   }
 
+  /**
+   * Findet ein Rezept anhand seiner Herkunft.
+   *
+   * Damit ein zweiter Import desselben Chefkoch-Rezepts keine Kopie anlegt.
+   * Die Quell-URL ist dafür der richtige Schlüssel: Sie bleibt gleich, auch
+   * wenn wir dem Rezept intern eine eigene ID gegeben haben.
+   */
+  findRecipeBySourceUrl(sourceUrl: string): Recipe | null {
+    const row = this.db.prepare('SELECT id FROM recipes WHERE source_url = ?').get(sourceUrl) as
+      | { id: string }
+      | undefined;
+    return row ? this.getRecipe(row.id) : null;
+  }
+
   deleteRecipe(id: string): boolean {
     const result = this.db.prepare('DELETE FROM recipes WHERE id = ?').run(id);
     return result.changes > 0;

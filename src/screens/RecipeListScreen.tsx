@@ -17,6 +17,7 @@ interface Props {
   selectedIds: string[];
   onToggleSelect: (id: string) => void;
   onCreate: () => void;
+  onImport: () => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onContinue: () => void;
@@ -28,6 +29,7 @@ export function RecipeListScreen({
   selectedIds,
   onToggleSelect,
   onCreate,
+  onImport,
   onEdit,
   onDelete,
   onContinue,
@@ -46,7 +48,19 @@ export function RecipeListScreen({
             : `${recipes.length} gespeichert${selectedCount > 0 ? ` · ${selectedCount} ausgewählt` : ''}`
         }
         onBack={onBack}
-        right={<Button label="+ Neu" onPress={onCreate} />}
+        right={
+          <View style={s.headerActions}>
+            {/* Gelb, weil es etwas von außen holt — der grüne Knopf legt
+                selbst an. Zwei Wege ins Rezeptbuch, zwei Farben. */}
+            <Pressable
+              onPress={onImport}
+              style={({ pressed }) => [s.importBtn, pressed && s.importBtnPressed]}
+            >
+              <Text style={s.importBtnText}>⬇ Chefkoch</Text>
+            </Pressable>
+            <Button label="+ Neu" onPress={onCreate} />
+          </View>
+        }
       />
 
       <FlatList
@@ -63,6 +77,11 @@ export function RecipeListScreen({
 
             <View style={s.emptyAction}>
               <Button label="Erstes Rezept anlegen" onPress={onCreate} />
+              <Button label="⬇ Von Chefkoch holen" onPress={onImport} variant="secondary" />
+              <Text style={s.emptyHint}>
+                Der Import übernimmt Titel, Portionen und Zutaten. Die Zubereitung
+                bleibt bei Chefkoch — ein Link führt hin.
+              </Text>
             </View>
           </View>
         }
@@ -77,7 +96,13 @@ export function RecipeListScreen({
                   </View>
 
                   <View style={s.body}>
-                    <Text style={s.name}>{item.title}</Text>
+                    <View style={s.nameRow}>
+                      <Text style={s.name}>{item.title}</Text>
+                      {/* Woher es kommt, bleibt sichtbar — sonst weiß man in
+                          drei Wochen nicht mehr, welches Rezept man selbst
+                          geschrieben hat. */}
+                      {item.sourceUrl ? <Text style={s.badge}>importiert</Text> : null}
+                    </View>
                     <Text style={s.meta}>
                       {item.servings} {item.servings === 1 ? 'Portion' : 'Portionen'} ·{' '}
                       {item.ingredients.length}{' '}
@@ -112,6 +137,15 @@ export function RecipeListScreen({
 
 const s = StyleSheet.create({
   list: { padding: spacing.lg, gap: spacing.md },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  importBtn: {
+    backgroundColor: colors.sun,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  importBtnPressed: { opacity: 0.75 },
+  importBtnText: { color: '#3a2a00', fontWeight: '700', fontSize: 14 },
   cardSelected: { borderColor: colors.primary, borderWidth: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   check: {
@@ -126,7 +160,18 @@ const s = StyleSheet.create({
   checkOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   checkMark: { color: '#fff', fontSize: 14, fontWeight: '700', lineHeight: 18 },
   body: { flex: 1 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   name: { fontSize: 16, fontWeight: '600', color: colors.text },
+  badge: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.seed,
+    backgroundColor: colors.sunSoft,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    overflow: 'hidden',
+  },
   meta: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
   action: { paddingHorizontal: spacing.xs, paddingVertical: spacing.xs },
   actionText: { fontSize: 13, color: colors.textMuted },

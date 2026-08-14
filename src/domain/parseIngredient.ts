@@ -31,6 +31,30 @@ const UNIT_WORDS: Record<string, Unit> = {
   dose: 'Dose', dosen: 'Dose',
 };
 
+/**
+ * Übersetzt eine einzelne Einheitenangabe.
+ *
+ * Wird gebraucht, wenn die Menge bereits getrennt vorliegt — etwa beim
+ * Import, wo die Quelle „4,0 | EL | Öl" liefert statt „4 EL Öl". Verträgt
+ * die dort üblichen Schreibweisen mit Klammerplural und Punkt: „Prise(n)",
+ * „Zehe(n)", „Pck.".
+ */
+export function parseUnitWord(raw: string | undefined): Unit | null {
+  if (!raw) return null;
+  const cleaned = raw
+    .toLowerCase()
+    .replace(/\(n\)|\(e\)|\(en\)/g, '')
+    .replace(/\.$/, '')
+    .trim();
+  return UNIT_WORDS[cleaned] ?? null;
+}
+
+/** Wandelt „4,0", „1.5" oder „1/2" in eine Zahl. Null, wenn unbrauchbar. */
+export function parseAmount(raw: string | undefined): number | null {
+  if (!raw) return null;
+  return toNumber(raw.trim());
+}
+
 export interface ParsedIngredient {
   name: string;
   quantity: Quantity;

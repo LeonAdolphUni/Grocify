@@ -15,6 +15,7 @@ import { ApiError, api } from './src/api/client';
 import type { Recipe } from './src/domain/types';
 import { emptyWeek, recipesInPlan, type WeekPlan, type Weekday } from './src/domain/weekPlan';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { ImportScreen } from './src/screens/ImportScreen';
 import { RecipeEditScreen } from './src/screens/RecipeEditScreen';
 import { RecipeListScreen } from './src/screens/RecipeListScreen';
 import { ShoppingListScreen } from './src/screens/ShoppingListScreen';
@@ -27,6 +28,7 @@ type Route =
   | { name: 'home' }
   | { name: 'week' }
   | { name: 'recipes' }
+  | { name: 'import' }
   | { name: 'edit'; recipeId?: string }
   | { name: 'supermarket'; source: Recipe[] }
   | { name: 'list'; source: Recipe[]; providerId: string };
@@ -119,6 +121,20 @@ export default function App() {
     [],
   );
 
+  /**
+   * Nach einem Import die Liste nachladen — aber auf dem Importbildschirm
+   * bleiben. Wer ein Rezept holt, holt meist gleich mehrere; ihn nach jedem
+   * Treffer hinauszuwerfen wäre lästig.
+   */
+  const handleImported = useCallback(async () => {
+    try {
+      setRecipes(await api.listRecipes());
+    } catch {
+      // Das Rezept liegt bereits in der Datenbank. Nur die Anzeige hinkt
+      // hinterher, und das richtet der nächste Wechsel zur Liste.
+    }
+  }, []);
+
   const handleDelete = useCallback(async (id: string) => {
     try {
       await api.deleteRecipe(id);
@@ -203,10 +219,18 @@ export default function App() {
             )
           }
           onCreate={() => setRoute({ name: 'edit' })}
+          onImport={() => setRoute({ name: 'import' })}
           onEdit={(recipeId) => setRoute({ name: 'edit', recipeId })}
           onDelete={handleDelete}
           onContinue={() => setRoute({ name: 'supermarket', source: selectedRecipes })}
           onBack={() => setRoute({ name: 'home' })}
+        />
+      )}
+
+      {route.name === 'import' && (
+        <ImportScreen
+          onImported={handleImported}
+          onBack={() => setRoute({ name: 'recipes' })}
         />
       )}
 

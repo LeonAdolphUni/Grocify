@@ -13,8 +13,10 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
+import { newId } from '../src/domain/id';
 import type { Recipe } from '../src/domain/types';
 import { emptyWeek, WEEKDAYS, type WeekPlan } from '../src/domain/weekPlan';
+import { ChefkochError, importRecipe, searchRecipes } from './chefkoch';
 import { GrocifyDb, PLAN_ID } from './db';
 
 interface Route {
@@ -26,6 +28,8 @@ interface Route {
 
 interface Ctx {
   params: Record<string, string>;
+  /** Werte aus dem Fragezeichen-Teil der URL. */
+  query: Record<string, string>;
   body: unknown;
   db: GrocifyDb;
 }
@@ -87,6 +91,39 @@ const ROUTES: Route[] = [
     method: 'GET',
     path: '/api/week-plan',
     handle: ({ db }) => db.getWeekPlan(),
+  },
+
+  // ── Import von Chefkoch ────────────────────────────────────────────────
+  // Läuft hier statt im Browser: Der käme wegen CORS nicht durch, und
+  // Änderungen an Chefkochs Schnittstelle bleiben so auf eine Datei
+  // beschränkt.
+
+  {
+    method: 'GET',
+    path: '/api/import/search',
+    handle: async ({ query }) => {
+      const term = (query.q ?? '').trim();
+      if (!term) throw new HttpError(400, 'Suchbegriff fehlt (?q=…)');
+      return searchRecipes(term, Math.min(40, Number(query.limit) || 20));
+    },
+  },
+
+  {
+    method: 'POST',
+    path: '/api/import/:chefkochId',
+    handle: async ({ db, params }) => {
+      // Eigene ID vergeben: Chefkochs ID gehört Chefkoch, und das Rezept
+      // liegt ab jetzt in deinem Buch. Die Herkunft steht in sourceUrl.
+      const fetched = await importRecipe(params.chefkochId, newId());
+
+      // Schon einmal geholt? Dann den vorhandenen Stand zurückgeben statt
+      // eine zweite Kopie anzulegen. Wer das Rezept inzwischen angepasst hat
+      // — andere Mengen, ein festgelegtes Produkt — behält seine Änderungen.
+      const existing = fetched.sourceUrl ? db.findRecipeBySourceUrl(fetched.sourceUrl) : null;
+      if (existing) return { recipe: existing, alreadyInBook: true };
+
+      return { recipe: db.saveRecipe(fetched), alreadyInBook: false };
+    },
   },
 
   {
@@ -198,7 +235,9 @@ function send(res: ServerResponse, status: number, payload: unknown) {
 
 export function createApi(db: GrocifyDb) {
   return createServer(async (req, res) => {
-    const path = (req.url ?? '/').split('?')[0].replace(/\/+$/, '') || '/';
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    const path = url.pathname.replace(/\/+$/, '') || '/';
+    const query = Object.fromEntries(url.searchParams);
     const method = req.method ?? 'GET';
 
     if (method === 'OPTIONS') return send(res, 204, null);
@@ -213,10 +252,13 @@ export function createApi(db: GrocifyDb) {
 
     try {
       const body = method === 'PUT' || method === 'POST' ? await readBody(req) : undefined;
-      const result = await route.r.handle({ params: route.params, body, db });
+      const result = await route.r.handle({ params: route.params, query, body, db });
       send(res, 200, result);
     } catch (err) {
       if (err instanceof HttpError) return send(res, err.status, { error: err.message });
+      // Fremde Quelle ausgefallen ist kein Serverfehler bei uns — 502 sagt
+      // dem Frontend, dass es an Chefkoch liegt und nicht am Backend.
+      if (err instanceof ChefkochError) return send(res, 502, { error: err.message });
       console.error('[api]', err);
       send(res, 500, { error: (err as Error).message });
     }
