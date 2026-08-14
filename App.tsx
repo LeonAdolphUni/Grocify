@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ApiError, api } from './src/api/client';
 import type { Recipe } from './src/domain/types';
 import { emptyWeek, recipesInPlan, type WeekPlan, type Weekday } from './src/domain/weekPlan';
+import { HomeScreen } from './src/screens/HomeScreen';
 import { RecipeEditScreen } from './src/screens/RecipeEditScreen';
 import { RecipeListScreen } from './src/screens/RecipeListScreen';
 import { ShoppingListScreen } from './src/screens/ShoppingListScreen';
@@ -23,6 +24,7 @@ import { Kees } from './src/ui/Kees';
 import { colors, radius, spacing } from './src/ui/theme';
 
 type Route =
+  | { name: 'home' }
   | { name: 'week' }
   | { name: 'recipes' }
   | { name: 'edit'; recipeId?: string }
@@ -33,7 +35,7 @@ export default function App() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [plan, setPlan] = useState<WeekPlan>(() => emptyWeek('week-1'));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [route, setRoute] = useState<Route>({ name: 'week' });
+  const [route, setRoute] = useState<Route>({ name: 'home' });
   const [loading, setLoading] = useState(true);
   const [fatal, setFatal] = useState<string | null>(null);
 
@@ -169,6 +171,15 @@ export default function App() {
     <>
       <StatusBar style="dark" />
 
+      {route.name === 'home' && (
+        <HomeScreen
+          plan={plan}
+          recipes={recipes}
+          onOpenWeek={() => setRoute({ name: 'week' })}
+          onOpenRecipes={() => setRoute({ name: 'recipes' })}
+        />
+      )}
+
       {route.name === 'week' && (
         <WeekPlanScreen
           plan={plan}
@@ -178,6 +189,7 @@ export default function App() {
           onClearWeek={clearWeek}
           onManageRecipes={() => setRoute({ name: 'recipes' })}
           onBuildList={() => setRoute({ name: 'supermarket', source: planRecipes })}
+          onBack={() => setRoute({ name: 'home' })}
         />
       )}
 
@@ -194,7 +206,7 @@ export default function App() {
           onEdit={(recipeId) => setRoute({ name: 'edit', recipeId })}
           onDelete={handleDelete}
           onContinue={() => setRoute({ name: 'supermarket', source: selectedRecipes })}
-          onBack={() => setRoute({ name: 'week' })}
+          onBack={() => setRoute({ name: 'home' })}
         />
       )}
 
@@ -210,7 +222,7 @@ export default function App() {
         <SupermarketScreen
           recipes={route.source}
           onSelect={(providerId) => setRoute({ name: 'list', source: route.source, providerId })}
-          onBack={() => setRoute({ name: 'week' })}
+          onBack={() => setRoute({ name: 'home' })}
         />
       )}
 
@@ -219,7 +231,7 @@ export default function App() {
           recipes={route.source}
           allRecipes={recipes}
           providerId={route.providerId}
-          onBack={() => setRoute({ name: 'week' })}
+          onBack={() => setRoute({ name: 'home' })}
         />
       )}
     </>

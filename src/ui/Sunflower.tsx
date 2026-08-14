@@ -17,25 +17,28 @@ import { Circle, Ellipse, G, Svg, Text as SvgText } from 'react-native-svg';
 
 import { colors, spacing } from './theme';
 
-const PETAL_COUNT = 12;
-
 interface SunflowerProps {
   /** Verwertung 0…1. `null` heißt: nicht berechenbar, alle Blätter grau. */
   value: number | null;
   size?: number;
   /** Beschriftung in der Blütenmitte. Standard ist der Prozentwert. */
   label?: string;
+  /**
+   * Anzahl der Blätter. Sieben ergibt eine Wochenanzeige — ein Blatt je
+   * Tag —, zwölf eine feinere Skala für die Verwertungsquote.
+   */
+  petalCount?: number;
 }
 
-export function Sunflower({ value, size = 132, label }: SunflowerProps) {
-  const filled = value === null ? 0 : Math.round(value * PETAL_COUNT);
+export function Sunflower({ value, size = 132, label, petalCount = 12 }: SunflowerProps) {
+  const filled = value === null ? 0 : Math.round(value * petalCount);
   const center = 56;
 
   return (
     <Svg width={size} height={size} viewBox="0 0 112 112">
       <G>
-        {Array.from({ length: PETAL_COUNT }, (_, i) => {
-          const angle = (360 / PETAL_COUNT) * i;
+        {Array.from({ length: petalCount }, (_, i) => {
+          const angle = (360 / petalCount) * i;
           const on = i < filled;
           return (
             <Ellipse

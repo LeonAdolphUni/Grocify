@@ -32,6 +32,7 @@ interface Props {
   onClearWeek: () => void;
   onManageRecipes: () => void;
   onBuildList: () => void;
+  onBack: () => void;
 }
 
 export function WeekPlanScreen({
@@ -42,6 +43,7 @@ export function WeekPlanScreen({
   onClearWeek,
   onManageRecipes,
   onBuildList,
+  onBack,
 }: Props) {
   /** Für welchen Tag gerade die Rezeptauswahl offen ist. */
   const [pickingFor, setPickingFor] = useState<Weekday | null>(null);
@@ -64,6 +66,7 @@ export function WeekPlanScreen({
             ? 'Noch nichts geplant'
             : `${days} ${days === 1 ? 'Tag' : 'Tage'} · ${meals} ${meals === 1 ? 'Gericht' : 'Gerichte'} · ${servings} Portionen`
         }
+        onBack={onBack}
         right={<Button label="Rezepte" variant="secondary" onPress={onManageRecipes} />}
       />
 
