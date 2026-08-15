@@ -15,6 +15,7 @@ import {
   deductFromPantry,
   pantryKey,
   prunePantry,
+  sameIngredientName,
   stalestDays,
   type PantryItem,
 } from '../src/domain/pantry';
@@ -150,6 +151,72 @@ describe('prunePantry und stalestDays', () => {
     const alt: PantryItem = { ...vorrat('Mehl', 1, 'g'), updatedAt: '2026-08-05T12:00:00.000Z' };
     const neu: PantryItem = { ...vorrat('Reis', 1, 'g'), updatedAt: '2026-08-14T12:00:00.000Z' };
     assert.equal(stalestDays([neu, alt], jetzt), 10);
+  });
+});
+
+describe('sameIngredientName — Singular gegen Plural', () => {
+  it('erkennt die deutschen Pluralendungen', () => {
+    // Genau der gemeldete Fehler: „2 Zwiebeln" im Vorrat wurde gegen
+    // „Zwiebel" im Rezept nicht gefunden, und der Vorrat blieb wirkungslos.
+    const paare: [string, string][] = [
+      ['Zwiebel', 'Zwiebeln'],
+      ['Tomate', 'Tomaten'],
+      ['Kartoffel', 'Kartoffeln'],
+      ['Möhre', 'Möhren'],
+      ['Paprika', 'Paprikas'],
+      ['Ei', 'Eier'],
+      ['Apfel', 'Äpfel'],
+    ];
+    for (const [a, b] of paare) {
+      assert.equal(sameIngredientName(a, b), true, `${a} / ${b}`);
+      assert.equal(sameIngredientName(b, a), true, `${b} / ${a} (umgekehrt)`);
+    }
+  });
+
+  it('ist unempfindlich gegen Schreibweise', () => {
+    assert.equal(sameIngredientName('ZWIEBELN', ' zwiebel '), true);
+  });
+
+  it('wirft verschiedene Zutaten nicht zusammen', () => {
+    const fremd: [string, string][] = [
+      ['Käse', 'Möhre'],
+      ['Mehl', 'Milch'],
+      ['Zwiebel', 'Knoblauch'],
+      ['Sahne', 'Salz'],
+    ];
+    for (const [a, b] of fremd) {
+      assert.equal(sameIngredientName(a, b), false, `${a} / ${b} dürfen nicht gleich sein`);
+    }
+  });
+
+  it('kurze Stämme greifen nur exakt', () => {
+    // Ohne Mindestlänge wäre „Eis" der Plural von „Ei" — die Endungsregel
+    // trifft bei zwei Buchstaben auf zu vieles zu.
+    assert.equal(sameIngredientName('Ei', 'Eis'), false);
+  });
+});
+
+describe('deductFromPantry — Plural in der Praxis', () => {
+  it('2 Zwiebeln im Vorrat decken 2 Zwiebeln im Rezept', () => {
+    const eintrag: PantryItem = {
+      id: 'zwiebeln',
+      name: 'Zwiebeln',
+      quantity: { amount: 2, unit: 'Stueck' },
+      updatedAt: new Date().toISOString(),
+    };
+    const d = deductFromPantry(zutat('Zwiebel', 2, 'Stueck'), [eintrag]);
+    assert.equal(d.fullyCovered, true, 'muss vollständig gedeckt sein');
+    assert.equal(d.remaining.amount, 0);
+  });
+
+  it('3 Eier im Vorrat decken 2 Eier im Rezept', () => {
+    const eintrag: PantryItem = {
+      id: 'eier',
+      name: 'Eier',
+      quantity: { amount: 3, unit: 'Stueck' },
+      updatedAt: new Date().toISOString(),
+    };
+    assert.equal(deductFromPantry(zutat('Ei', 2, 'Stueck'), [eintrag]).fullyCovered, true);
   });
 });
 

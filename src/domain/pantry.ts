@@ -53,6 +53,57 @@ export function pantryKey(name: string): string {
 }
 
 /**
+ * Deutsche Pluralendungen, die an den Wortstamm treten.
+ *
+ * Bewusst nur die angehängten: Umlautplurale („Apfel" → „Äpfel") ändern den
+ * Stamm und stehen deshalb unten als Ausnahmen.
+ */
+const PLURAL_ENDUNGEN = ['n', 'en', 'e', 'er', 's', 'nen'];
+
+/**
+ * Wortpaare, die sich nicht über eine Endung ableiten lassen.
+ *
+ * Entweder weil der Stamm sich ändert (Umlaut) oder weil das Wort zu kurz
+ * für die Endungsregel ist — „ei" hat nur zwei Buchstaben, und bei so
+ * kurzen Stämmen träfe die Regel auch auf „Eis" zu.
+ */
+const UNREGELMAESSIG: Record<string, string> = {
+  ei: 'eier',
+  apfel: 'aepfel',
+  wurst: 'wuerste',
+  saft: 'saefte',
+  soss: 'soossen',
+  nuss: 'nuesse',
+  glas: 'glaeser',
+  dose: 'dosen',
+};
+
+/**
+ * Meinen zwei Namen dieselbe Zutat?
+ *
+ * Der Grund für diese Funktion ist ein echter Fehler: Wer „2 Zwiebeln" in
+ * den Vorrat tippt — der natürliche deutsche Plural —, dessen Eintrag lief
+ * unter `zwiebeln`. Im Rezept steht aber `zwiebel`, weil Chefkoch die
+ * Einzahl liefert. Der Abgleich fand nichts, und der Vorrat wurde
+ * kommentarlos ignoriert.
+ *
+ * Verglichen wird deshalb Stamm gegen Stamm plus bekannte Pluralendung.
+ * Mindestens drei Zeichen Stamm, sonst würde „Eis" zum Plural von „Ei".
+ */
+export function sameIngredientName(a: string, b: string): boolean {
+  const ka = normalizeKey(a);
+  const kb = normalizeKey(b);
+  if (ka === kb) return true;
+
+  if (UNREGELMAESSIG[ka] === kb || UNREGELMAESSIG[kb] === ka) return true;
+
+  const [kurz, lang] = ka.length <= kb.length ? [ka, kb] : [kb, ka];
+  if (kurz.length < 3 || !lang.startsWith(kurz)) return false;
+
+  return PLURAL_ENDUNGEN.includes(lang.slice(kurz.length));
+}
+
+/**
  * Zieht den Vorrat von einer benötigten Menge ab.
  *
  * Gerechnet wird über die Basiseinheit, damit „0,5 l Milch" im Rezept gegen
@@ -64,7 +115,14 @@ export function deductFromPantry(
   pantry: PantryItem[],
 ): PantryDeduction {
   const key = ingredient.id || pantryKey(ingredient.name);
-  const stock = pantry.find((p) => p.id === key || pantryKey(p.name) === key);
+  // Über den Namen vergleichen, nicht nur über den Schlüssel: „Zwiebeln"
+  // im Vorrat und „Zwiebel" im Rezept sind dieselbe Zutat.
+  const stock = pantry.find(
+    (p) =>
+      p.id === key ||
+      sameIngredientName(p.name, ingredient.name) ||
+      sameIngredientName(p.id, key),
+  );
 
   if (!stock) {
     return { remaining: ingredient.quantity, covered: 0, fullyCovered: false, skipped: 'nicht im Vorrat' };
