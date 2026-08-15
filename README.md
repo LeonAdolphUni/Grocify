@@ -263,7 +263,7 @@ Klassentausch, kein Umbau der App.
 | Sprint | Inhalt | Status |
 |---|---|---|
 | 0 | Projektgerüst, AH-Durchstich | ✅ |
-| 1 | Domänenkern: Einheiten, Typen | ✅ — **Tests fehlen weiterhin, siehe unten** |
+| 1 | Domänenkern: Einheiten, Typen | ✅ — Tests für `units` und `shoppingList`, siehe unten |
 | 2 | Screens: Rezepte, Supermarkt, Einkaufsliste | ✅ |
 | 3 | Rezept-Parsing (Freitext, ohne LLM) | ✅ — `parseIngredient.ts`, 24 Fälle |
 | 3b | Rezept-Import von Chefkoch | ✅ |
@@ -277,23 +277,45 @@ Klassentausch, kein Umbau der App.
 | 11 | Landingpage | ✅ — `landing/`, Spec in `DESIGN.md` |
 | 12 | Build, Release | offen |
 
-### Die größte offene Lücke: Tests
+### Tests
 
-Es gibt Messwerkzeuge, aber keinen einzigen automatisierten Test. Ausgerechnet
-`shoppingList.ts` — die Produktauswahl — wurde mehrfach von Hand nachjustiert,
-zuletzt mit dem Rückfall aufs Grundwort („hokkaido pompoen" → „pompoen").
-Kontrolliert wurde jedes Mal, indem `npm run try:week` lief und die Zahl mit
-der vorherigen verglichen wurde: **40,17 € bei 85 % Verwertung.**
+```bash
+npm test        # 40 Tests, kein Netzwerk, unter einer Sekunde
+```
 
-Das ist ein Test — nur von Hand, und gegen ein Sortiment, dessen Preise sich
-täglich ändern. `node:test` ist in Node eingebaut und bräuchte keine neue
-Abhängigkeit. Vor Sprint 6/7 sollte das stehen: Wer die Zuordnung auf ein LLM
-umstellt, ändert genau den Teil, für den es bisher keine Absicherung gibt.
+Läuft über `node:test` — in Node eingebaut, keine neue Abhängigkeit.
+
+Der Anlass: `shoppingList.ts` — die Produktauswahl — wurde mehrfach von Hand
+nachjustiert, zuletzt mit dem Rückfall aufs Grundwort („hokkaido pompoen" →
+„pompoen"). Kontrolliert wurde jedes Mal nur, indem `npm run try:week` lief und
+die Summe mit der vorherigen verglichen wurde. Das ist eine Messung gegen ein
+Sortiment, dessen Preise sich täglich ändern — sie zeigt, dass die Summe gleich
+blieb, nicht dass die Regeln stimmen.
+
+Die Tests laufen deshalb gegen **erfundene Produkte mit festen Preisen**. Jeder
+Fall bildet eine Fehlzuordnung ab, die tatsächlich vorkam: Ketchup statt
+Tomaten, Kürbisbrötchen statt Kürbis, `AH Tomaten passata gezeefd` statt
+`AH Tomaten`.
+
+| Abgedeckt | Noch offen |
+|---|---|
+| `units.ts` — Umrechnung, mehrdeutige Einheiten, Skalierung | `translate.ts` |
+| `shoppingList.ts` — Produktwahl, Zusammenfassung, Randfälle | `weekPlan.ts`, `leftoverUse.ts` |
+| | `server/` — db, api, chefkoch |
+
+`parseIngredient.ts` deckt `npm run smoke:parse` mit 24 Fällen ab; die gehören
+noch nach `tests/` überführt.
+
+Ein Test hat beim ersten Lauf gleich etwas gezeigt — allerdings über mich:
+Ich hatte erwartet, dass `scale()` bei 0 Portionen still `Infinity` liefert.
+Tatsächlich wirft die Funktion einen expliziten Fehler. Der Test wurde an das
+Verhalten angepasst, nicht umgekehrt.
 
 ### Messwerkzeuge
 
 | Befehl | Was er misst |
 |---|---|
+| `npm test` | Domänenkern, 40 Tests, ohne Netzwerk |
 | `npm run typecheck` | TypeScript |
 | `npm run smoke` | Albert-Heijn-Anbindung |
 | `npm run smoke:api` | Backend Ende zu Ende (eigene Wegwerf-Datenbank) |
