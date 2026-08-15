@@ -71,15 +71,56 @@ export interface AllerhandeNutrition {
   protein?: number;
 }
 
-async function getHtml(path: string): Promise<string> {
+/**
+ * Mindestabstand zwischen zwei Anfragen an ah.nl, in Millisekunden.
+ *
+ * Nicht willkürlich: Beim Entwickeln haben schnell aufeinanderfolgende
+ * Aufrufe ein **HTTP 403** ausgelöst — AH schützt sich gegen Lastspitzen,
+ * und zu Recht. Ein Rezeptimport, der zehn Seiten in einer Sekunde zieht,
+ * verhält sich wie ein Scraper, nicht wie ein Nutzer.
+ *
+ * Eine Sekunde ist langsamer als nötig und schneller als lästig: Der Nutzer
+ * wartet beim Suchen ohnehin auf eine Antwort, und beim Planen laufen die
+ * Abrufe im Hintergrund.
+ */
+const MIN_ABSTAND_MS = 1000;
+
+let letzterAufruf = 0;
+
+/** Wartet, bis der Mindestabstand seit dem letzten Aufruf vergangen ist. */
+async function drossel(): Promise<void> {
+  const seit = Date.now() - letzterAufruf;
+  if (seit < MIN_ABSTAND_MS) {
+    await new Promise((r) => setTimeout(r, MIN_ABSTAND_MS - seit));
+  }
+  letzterAufruf = Date.now();
+}
+
+async function getHtml(path: string, versuch = 0): Promise<string> {
+  await drossel();
+
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, { headers: HEADERS });
   } catch (err) {
     throw new AllerhandeError(`Albert Heijn nicht erreichbar: ${(err as Error).message}`);
   }
+
+  // 403 und 429 heißen „zu schnell", nicht „nie wieder". Einmal warten und
+  // erneut versuchen, dann aufgeben — eine Schleife wäre genau das Verhalten,
+  // gegen das die Sperre sich richtet.
+  if ((res.status === 403 || res.status === 429) && versuch < 2) {
+    await new Promise((r) => setTimeout(r, 2500 * (versuch + 1)));
+    return getHtml(path, versuch + 1);
+  }
+
   if (!res.ok) {
-    throw new AllerhandeError(`Albert Heijn antwortete mit HTTP ${res.status}`, res.status);
+    throw new AllerhandeError(
+      res.status === 403
+        ? 'Albert Heijn hat die Anfrage abgelehnt (HTTP 403). Warte einen Moment und versuch es erneut.'
+        : `Albert Heijn antwortete mit HTTP ${res.status}`,
+      res.status,
+    );
   }
   return res.text();
 }
@@ -132,24 +173,7 @@ export async function searchRecipes(query: string, limit = 20): Promise<RecipeHi
   // `/allerhande/*?*&*`, also URLs mit zwei oder mehr Parametern.
   const html = await getHtml(`/allerhande/recepten-zoeken?query=${encodeURIComponent(term)}`);
 
-  const gesehen = new Set<string>();
-  const treffer: RecipeHit[] = [];
-
-  for (const m of html.matchAll(/href="(\/allerhande\/recept\/([^/"]+)\/([^"]+))"/g)) {
-    const [, path, id, slug] = m;
-    if (gesehen.has(id)) continue;
-    gesehen.add(id);
-
-    treffer.push({
-      id,
-      path,
-      title: titleFromSlug(slug),
-      imageUrl: undefined,
-    });
-    if (treffer.length >= limit) break;
-  }
-
-  return treffer;
+  return collectHits(html, limit);
 }
 
 /** „romige-green-goddess-pasta" → „Romige green goddess pasta". */
@@ -260,4 +284,79 @@ function isDutchStaple(name: string): boolean {
   if (NL_STAPLES.has(key)) return true;
   // „extra vergine olijfolie" endet auf „olijfolie".
   return [...NL_STAPLES].some((s) => s.length >= 4 && key.endsWith(s));
+}
+
+/* ── Katalog ───────────────────────────────────────────────────────── */
+
+export interface RecipeCategory {
+  /** Der Pfad-Abschnitt bei AH, z. B. „kip". */
+  slug: string;
+  label: string;
+  /** Oberer Reiter, unter dem die Kategorie steht. */
+  group: 'Gerichte' | 'Küchen' | 'Art' | 'Ernährung';
+}
+
+/**
+ * Rezeptkategorien von Allerhande.
+ *
+ * Jeder Eintrag wurde einzeln geprüft: Von 32 vermuteten Slugs lieferten
+ * nur diese 21 tatsächlich Rezepte — „vlees", „vis" und „ontbijt" gibt es
+ * als Seite gar nicht (404), „wraps" und „risotto" antworten mit 403. Eine
+ * Kategorie, die ins Leere führt, ist schlimmer als eine fehlende.
+ *
+ * Die Gruppen sind unsere Ordnung, nicht AHs: Sie tragen die Reiter der
+ * Katalogansicht.
+ */
+export const CATEGORIES: RecipeCategory[] = [
+  { slug: 'kip', label: 'Hähnchen', group: 'Gerichte' },
+  { slug: 'pasta', label: 'Pasta', group: 'Gerichte' },
+  { slug: 'soep', label: 'Suppen', group: 'Gerichte' },
+  { slug: 'salades', label: 'Salate', group: 'Gerichte' },
+  { slug: 'curry', label: 'Curry', group: 'Gerichte' },
+  { slug: 'pizza', label: 'Pizza', group: 'Gerichte' },
+  { slug: 'rijst', label: 'Reis', group: 'Gerichte' },
+  { slug: 'couscous', label: 'Couscous', group: 'Gerichte' },
+  { slug: 'stamppot', label: 'Stamppot', group: 'Gerichte' },
+  { slug: 'lunch', label: 'Mittagessen', group: 'Gerichte' },
+
+  { slug: 'italiaanse-recepten', label: 'Italienisch', group: 'Küchen' },
+  { slug: 'aziatische-recepten', label: 'Asiatisch', group: 'Küchen' },
+  { slug: 'mexicaanse-recepten', label: 'Mexikanisch', group: 'Küchen' },
+  { slug: 'midden-oosterse-recepten', label: 'Orientalisch', group: 'Küchen' },
+
+  { slug: 'makkelijke-recepten', label: 'Einfach', group: 'Art' },
+  { slug: 'eenpansgerechten', label: 'Ein Topf', group: 'Art' },
+  { slug: 'airfryer-recepten', label: 'Heißluftfritteuse', group: 'Art' },
+  { slug: 'slowcooker-recepten', label: 'Schongarer', group: 'Art' },
+
+  { slug: 'gezonde-recepten', label: 'Gesund', group: 'Ernährung' },
+  { slug: 'vezelrijke-recepten', label: 'Ballaststoffreich', group: 'Ernährung' },
+  { slug: 'vegetarische-recepten', label: 'Vegetarisch', group: 'Ernährung' },
+];
+
+/** Die Reiter der Katalogansicht, in Anzeigereihenfolge. */
+export const CATEGORY_GROUPS = ['Gerichte', 'Küchen', 'Art', 'Ernährung'] as const;
+
+/** Holt die Rezepte einer Kategorie. */
+export async function browseCategory(slug: string, limit = 24): Promise<RecipeHit[]> {
+  const bekannt = CATEGORIES.some((c) => c.slug === slug);
+  if (!bekannt) throw new AllerhandeError(`Unbekannte Kategorie: ${slug}`);
+
+  const html = await getHtml(`/allerhande/recepten/${slug}`);
+  return collectHits(html, limit);
+}
+
+/** Liest Rezeptlinks aus einer Übersichts- oder Kategorieseite. */
+function collectHits(html: string, limit: number): RecipeHit[] {
+  const gesehen = new Set<string>();
+  const treffer: RecipeHit[] = [];
+
+  for (const m of html.matchAll(/href="(\/allerhande\/recept\/([^/"]+)\/([^"]+))"/g)) {
+    const [, path, id, slug] = m;
+    if (gesehen.has(id)) continue;
+    gesehen.add(id);
+    treffer.push({ id, path, title: titleFromSlug(slug) });
+    if (treffer.length >= limit) break;
+  }
+  return treffer;
 }

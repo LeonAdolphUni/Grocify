@@ -310,6 +310,7 @@ export class GrocifyDb {
       servingsPerMeal:
         Number.isFinite(servings) && servings >= 1 ? Math.round(servings) : DEFAULT_SERVINGS,
       pantryReviewedAt: map.get('pantryReviewedAt') || undefined,
+      searchLanguage: (map.get('searchLanguage') as Settings['searchLanguage']) || 'de',
     };
   }
 
@@ -320,6 +321,15 @@ export class GrocifyDb {
          ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       )
       .run('servingsPerMeal', String(settings.servingsPerMeal));
+
+    if (settings.searchLanguage) {
+      this.db
+        .prepare(
+          `INSERT INTO settings (key, value) VALUES (?, ?)
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        )
+        .run('searchLanguage', settings.searchLanguage);
+    }
 
     if (settings.pantryReviewedAt) {
       this.db

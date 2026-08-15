@@ -18,8 +18,15 @@ import type { PantryItem } from '../src/domain/pantry';
 import type { Settings } from '../src/domain/settings';
 import type { Recipe } from '../src/domain/types';
 import { emptyWeek, WEEKDAYS, type WeekPlan } from '../src/domain/weekPlan';
-import { AllerhandeError, importRecipe, searchRecipes } from './allerhande';
+import {
+  AllerhandeError,
+  browseCategory,
+  CATEGORIES,
+  importRecipe,
+  searchRecipes,
+} from './allerhande';
 import { GrocifyDb, PLAN_ID } from './db';
+import { adviseWeek } from './weekAdvisor';
 
 interface Route {
   method: string;
@@ -130,6 +137,50 @@ const ROUTES: Route[] = [
     },
   },
 
+  /**
+   * Der Wochenplaner-Vorschlag.
+   *
+   * POST, obwohl nichts gespeichert wird: Wünsche, Vorrat und Ablehnungen
+   * passen nicht sinnvoll in eine URL, und AHs robots.txt-Grenze von einem
+   * Abfrageparameter gilt hier zwar nicht, die Lesbarkeit aber schon.
+   */
+  {
+    method: 'POST',
+    path: '/api/advise-week',
+    handle: async ({ db, body }) => {
+      const b = (typeof body === 'object' && body !== null ? body : {}) as {
+        wishes?: unknown;
+        days?: unknown;
+        rejected?: unknown;
+      };
+      const days = Number(b.days);
+
+      return adviseWeek({
+        wishes: Array.isArray(b.wishes)
+          ? b.wishes.filter((w): w is string => typeof w === 'string' && w.trim().length > 0)
+          : [],
+        days: Number.isFinite(days) && days >= 1 && days <= 7 ? Math.round(days) : 5,
+        pantry: db.listPantry(),
+        rejected: Array.isArray(b.rejected)
+          ? b.rejected.filter((r): r is string => typeof r === 'string')
+          : [],
+      });
+    },
+  },
+
+  {
+    method: 'GET',
+    path: '/api/import/categories',
+    handle: () => CATEGORIES,
+  },
+
+  {
+    method: 'GET',
+    path: '/api/import/category/:slug',
+    handle: ({ params, query }) =>
+      browseCategory(params.slug, Math.min(40, Number(query.limit) || 24)),
+  },
+
   {
     method: 'PUT',
     path: '/api/week-plan',
@@ -156,10 +207,15 @@ const ROUTES: Route[] = [
       if (!Number.isFinite(portionen) || portionen < 1 || portionen > 12) {
         throw new HttpError(400, 'servingsPerMeal muss zwischen 1 und 12 liegen');
       }
+      const sprache = s.searchLanguage;
+      if (sprache && !['de', 'nl', 'en'].includes(sprache)) {
+        throw new HttpError(400, 'searchLanguage muss de, nl oder en sein');
+      }
       return db.saveSettings({
         servingsPerMeal: Math.round(portionen),
         pantryReviewedAt:
           typeof s.pantryReviewedAt === 'string' ? s.pantryReviewedAt : undefined,
+        searchLanguage: sprache,
       });
     },
   },

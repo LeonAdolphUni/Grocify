@@ -283,6 +283,80 @@ Rezepte — deshalb nutzt die Suche bewusst **genau einen** Abfrageparameter.
 Das deutsche Wörterbuch bleibt: Es gilt weiterhin für selbst angelegte
 Rezepte, die man auf Deutsch eintippt.
 
+## Suchen und Stöbern
+
+Der Rezeptbildschirm hat zwei Reiter, weil es zwei Absichten sind: **Suchen**
+(du weißt, was du willst) und **Stöbern** (du weißt es nicht). Ein Suchfeld
+allein bedient nur die erste — wer nicht weiß, wonach er suchen soll, steht
+davor wie vor einer leeren Seite.
+
+Der Katalog ordnet 21 geprüfte Kategorien in vier Gruppen: Gerichte, Küchen,
+Art, Ernährung. Geprüft heißt geprüft: Von 32 vermuteten Kategorie-Adressen
+lieferten nur diese 21 tatsächlich Rezepte. „vlees", „vis" und „ontbijt" gibt
+es als Seite gar nicht, „wraps" und „risotto" antworten mit 403. Eine
+Kategorie, die ins Leere führt, ist schlimmer als eine fehlende.
+
+### Die Suche übersetzt
+
+Allerhande ist niederländisch. Wer „Eiersalat" eingibt, sucht dort nach einem
+Wort, das es nicht gibt. Einstellbar ist **Deutsch, Nederlands, English**;
+der Begriff wird vor der Suche übersetzt, und die Übersetzung steht sichtbar
+unter dem Feld — wer „Eiersalat" tippt und Ergebnisse zu „eiersalade"
+bekommt, soll den Grund sehen.
+
+| Eingabe | wird gesucht als |
+|---|---|
+| Eiersalat | `eiersalade` |
+| Kürbissuppe | `pompoensoep` |
+| Hähnchen | `kip` |
+| Krabbensalat | `krabbensalade` |
+| egg salad | `eiersalade` |
+| chicken soup | `kip soep` |
+
+Die letzten Fälle zeigen den Trick: „Kürbissuppe" steht in keiner Tabelle.
+Deutsch und Niederländisch sind nah verwandt, also wird „-suppe" zu „-soep"
+und der Stamm getrennt nachgeschlagen. Das greift auch bei Wörtern, die
+niemand eingetragen hat.
+
+## Der Wochenplaner fragt nach
+
+Der Planer durchsucht **Allerhande**, nicht das eigene Rezeptbuch. Nur im
+eigenen Buch zu suchen wäre ein Kreis: Man kann planen, was man schon hat,
+und wer acht Rezepte besitzt, bekommt achtmal dieselbe Woche.
+
+Der Ablauf ist ein Gespräch, keine Maske. Man sagt, worauf man Lust hat,
+bekommt Vorschläge, verwirft was nicht passt und bekommt Ersatz. Jeder
+Vorschlag trägt seine Begründung — eine Liste ohne Begründung müsste man
+glauben, diese kann man prüfen:
+
+```
+Pastasalade met gegrilde kip     550 kcal   8 Zutaten   ausgewogen · deckt „kip" ab · 30 Min
+Broccolisoep met volkorenbrood   130 kcal   6 Zutaten   nur 6 Zutaten · teilt 1 Zutat · deckt „soep" ab
+Paprika-tomatensoep              170 kcal   6 Zutaten   nur 6 Zutaten · teilt 2 Zutaten
+```
+
+**Gesund und günstig sind die Auswahlregel, nicht Beiwerk.** Gesund kommt aus
+AHs eigenen Nährwertangaben je Portion — keine Schätzung. Günstig ergibt sich
+aus wenigen Zutaten und Überschneidung: Wer siebenmal dieselbe Packung
+anbricht, zahlt sie einmal.
+
+Der echte Preis kommt nicht in den Vorschlag: Jedes Rezept bräuchte zehn
+Produktsuchen, für zwanzig Kandidaten wären das zweihundert Anfragen. Die
+Zutatenzahl ist ein grober, aber ehrlicher Stellvertreter — der Preis steht
+wenige Klicks später in der Einkaufsliste.
+
+### Anfragen sind gedrosselt
+
+Beim Entwickeln haben schnell aufeinanderfolgende Aufrufe ein **HTTP 403**
+ausgelöst. AH schützt sich gegen Lastspitzen, zu Recht: Ein Import, der zehn
+Seiten in einer Sekunde zieht, verhält sich wie ein Scraper. Zwischen zwei
+Anfragen liegt deshalb mindestens **eine Sekunde**, und bei 403 oder 429 wird
+einmal gewartet und erneut versucht — nicht in einer Schleife, das wäre genau
+das Verhalten, gegen das sich die Sperre richtet.
+
+Ein Wochenplan-Vorschlag holt neun bis zwanzig Rezeptseiten und dauert
+entsprechend **zehn bis zwanzig Sekunden**. Das steht auch in der App.
+
 ## Portionen: für eine Person gerechnet
 
 Grocify ist für **eine Person** gebaut, Rezepte sind es nie — Allerhande

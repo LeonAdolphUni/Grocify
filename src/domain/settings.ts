@@ -6,6 +6,8 @@
  * treffen kann.
  */
 
+import type { SearchLanguage } from './searchLanguage';
+
 export interface Settings {
   /**
    * Auf wie viele Portionen jedes Rezept umgerechnet wird.
@@ -24,6 +26,14 @@ export interface Settings {
    * und das fällt erst im Laden auf.
    */
   pantryReviewedAt?: string;
+  /**
+   * In welcher Sprache man Rezepte sucht.
+   *
+   * Allerhande ist niederländisch. Wer „Eiersalat" eingibt, sucht dort nach
+   * einem Wort, das es nicht gibt — deshalb wird der Begriff vor der Suche
+   * übersetzt. Standard ist Deutsch, weil die App auf Deutsch läuft.
+   */
+  searchLanguage?: SearchLanguage;
 }
 
 /**
@@ -57,4 +67,4 @@ export function startOfWeek(now: Date): Date {
   return d;
 }
 
-export const DEFAULT_SETTINGS: Settings = { servingsPerMeal: 1 };
+export const DEFAULT_SETTINGS: Settings = { servingsPerMeal: 1, searchLanguage: 'de' };

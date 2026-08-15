@@ -73,6 +73,34 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** Ein Vorschlag des Wochenplaners. */
+export interface AdvisorPick {
+  hit: ImportHit;
+  recipe: Recipe;
+  score: number;
+  reasons: string[];
+  kcalPerServing?: number;
+  proteinPerServing?: number;
+  ingredientCount: number;
+  pantryShare: number;
+  totalMinutes?: number;
+}
+
+export interface AdvisorResult {
+  picks: AdvisorPick[];
+  /** Wünsche, für die Allerhande nichts hergab. */
+  unmatched: string[];
+  /** Wie viele Rezeptseiten geholt wurden. */
+  fetched: number;
+}
+
+/** Eine Rezeptkategorie im Katalog. */
+export interface RecipeCategory {
+  slug: string;
+  label: string;
+  group: string;
+}
+
 /** Ein Suchtreffer beim Import aus Allerhande. */
 export interface ImportHit {
   id: string;
@@ -136,6 +164,25 @@ export const api = {
 
   deletePantryItem: (id: string) =>
     request<{ deleted: string }>(`/pantry/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  /**
+   * Lässt eine Woche aus Allerhande vorschlagen.
+   *
+   * Dauert bewusst lange: Für jeden Kandidaten wird eine Rezeptseite geholt,
+   * und die Anfragen sind gedrosselt, damit AH nicht mit 403 antwortet.
+   */
+  adviseWeek: (wishes: string[], days: number, rejected: string[] = []) =>
+    request<AdvisorResult>('/advise-week', {
+      method: 'POST',
+      body: JSON.stringify({ wishes, days, rejected }),
+    }),
+
+  /** Die geprüften Rezeptkategorien für den Katalog. */
+  listCategories: () => request<RecipeCategory[]>('/import/categories'),
+
+  /** Die Rezepte einer Kategorie. */
+  browseCategory: (slug: string) =>
+    request<ImportHit[]>(`/import/category/${encodeURIComponent(slug)}`),
 
   /** Rezepte bei Allerhande suchen. Läuft über das Backend, nicht im Browser. */
   searchImport: (query: string) =>

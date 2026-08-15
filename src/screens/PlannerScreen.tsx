@@ -1,306 +1,309 @@
 /**
- * Der Wochenplaner-Helfer.
+ * Der Wochenplaner — als Gespräch.
  *
- * Du sagst, worauf du Lust hast, und bekommst eine Woche vorgeschlagen.
+ * Er fragt, worauf du Lust hast, sucht bei **Albert Heijn** danach und
+ * schlägt eine Woche vor. Nicht im eigenen Rezeptbuch: Das wäre ein Kreis —
+ * man kann nur planen, was man schon hat, und wer acht Rezepte besitzt,
+ * bekommt achtmal dieselbe Woche.
  *
- * Die gestalterische Kernentscheidung: **Jeder Vorschlag sagt, warum er
- * dasteht.** „Passt zu Hähnchen · 25 % aus dem Vorrat · teilt 2 Zutaten" ist
- * überprüfbar; eine Liste ohne Begründung müsste man glauben. Und was nicht
- * gefunden wurde, steht ebenfalls da — ein Planer, der einen Wunsch stillt
- * ignoriert, wirkt beim zweiten Mal unbrauchbar.
+ * **Warum ein Dialog und keine Maske.** Ein Formular mit acht Feldern würde
+ * dieselbe Information abfragen und sich anfühlen wie ein Antrag. Ein
+ * Gespräch fragt eins nach dem anderen, zeigt zwischendurch, was es
+ * verstanden hat, und lässt sich korrigieren — „das lieber nicht" holt
+ * Ersatz, statt von vorn zu beginnen.
+ *
+ * **Gesund und günstig sind die Auswahlregel, nicht Beiwerk.** Gesund kommt
+ * aus AHs eigenen Nährwertangaben je Portion — keine Schätzung. Günstig
+ * ergibt sich aus wenigen Zutaten und Überschneidung: Wer siebenmal dieselbe
+ * Packung anbricht, zahlt sie einmal.
+ *
+ * Jeder Vorschlag trägt seine Begründung. Eine Liste ohne Begründung müsste
+ * man glauben; diese kann man prüfen.
  */
 
-import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
-import type { PantryItem } from '../domain/pantry';
-import type { Recipe } from '../domain/types';
-import { planWeek, type PlannerPick } from '../domain/weekPlanner';
-import { WEEKDAY_SHORT, WEEKDAYS, type WeekPlan } from '../domain/weekPlan';
+import { ApiError, api, type AdvisorPick } from '../api/client';
+import { translateSearchQuery, type SearchLanguage } from '../domain/searchLanguage';
+import { WEEKDAYS, WEEKDAY_SHORT, emptyWeek, type WeekPlan } from '../domain/weekPlan';
+import { parseWishes } from '../domain/weekPlanner';
+import { Kees } from '../ui/Kees';
 import { Monogram } from '../ui/Monogram';
 import { Button, Header, Notice, Screen } from '../ui/components';
 import { colors, fonts, radius, spacing } from '../ui/theme';
 
 interface Props {
-  recipes: Recipe[];
-  pantry: PantryItem[];
-  onApply: (plan: WeekPlan) => void;
-  onManageRecipes: () => void;
+  language: SearchLanguage;
+  pantryCount: number;
+  onApply: (plan: WeekPlan, picks: AdvisorPick[]) => void;
   onBack: () => void;
 }
 
-/** Anregungen, damit man nicht vor einem leeren Feld sitzt. */
-const VORSCHLAEGE = ['Pasta', 'was mit Hähnchen', 'vegetarisch', 'schnell', 'Suppe', 'deftig'];
+/** Ein Beitrag im Gespräch. */
+interface Turn {
+  from: 'kees' | 'du';
+  text: string;
+}
 
-export function PlannerScreen({ recipes, pantry, onApply, onManageRecipes, onBack }: Props) {
-  const [wishes, setWishes] = useState('');
+const ANREGUNGEN = ['Pasta', 'was mit Hähnchen', 'vegetarisch', 'Suppe', 'schnell', 'egal'];
+
+/** Erkennt „ist mir egal" in seinen üblichen Formen. */
+const EGAL = /^(egal|weiß nicht|weiss nicht|überrasch mich|ueberrasch mich|irgendwas)$/i;
+
+export function PlannerScreen({ language, pantryCount, onApply, onBack }: Props) {
+  const [turns, setTurns] = useState<Turn[]>([
+    {
+      from: 'kees',
+      text:
+        'Worauf hast du diese Woche Lust? Sag ruhig mehrere Sachen — „Pasta, was mit Hähnchen, was Schnelles". Wenn dir nichts einfällt, schreib „egal", dann such ich was Gesundes aus.',
+    },
+  ]);
+  const [input, setInput] = useState('');
   const [days, setDays] = useState(5);
-  const [result, setResult] = useState<ReturnType<typeof planWeek> | null>(null);
+  const [picks, setPicks] = useState<AdvisorPick[] | null>(null);
+  const [rejected, setRejected] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const scroller = useRef<ScrollView>(null);
 
-  const planen = useCallback(() => {
-    setResult(planWeek(recipes, { wishes, pantry, days }));
-  }, [recipes, wishes, pantry, days]);
+  const frage = useCallback(
+    async (text: string, ablehnungen: string[], letzteWuensche?: string[]) => {
+      const roh = text.trim();
 
-  const anhaengen = useCallback(
-    (wort: string) => setWishes((w) => (w.trim() ? `${w.trim()}, ${wort}` : wort)),
-    [],
+      // Bei einer Ablehnung wird ohne neue Eingabe erneut gefragt — dann
+      // gelten die Wünsche von vorhin weiter.
+      const nl =
+        letzteWuensche ??
+        (EGAL.test(roh) ? [] : parseWishes(roh).map((w) => translateSearchQuery(w, language)));
+
+      setLoading(true);
+      setError(null);
+      setTurns((t) => [
+        ...t,
+        ...(roh ? ([{ from: 'du', text: roh }] as Turn[]) : []),
+        {
+          from: 'kees',
+          text:
+            nl.length > 0
+              ? `Alles klar — ich suche bei Albert Heijn nach ${nl.join(', ')}. Das dauert einen Moment, ich hole jedes Rezept einzeln.`
+              : 'Gut, dann such ich was Gesundes und Einfaches aus. Moment.',
+        },
+      ]);
+
+      try {
+        const result = await api.adviseWeek(nl, days, ablehnungen);
+        setPicks(result.picks);
+
+        const gesund = result.picks.filter((p) => p.reasons.includes('ausgewogen')).length;
+        setTurns((t) => [
+          ...t,
+          {
+            from: 'kees',
+            text:
+              result.picks.length === 0
+                ? 'Da habe ich nichts gefunden. Versuch einen anderen Begriff — oder „egal", dann such ich selbst aus.'
+                : `${result.picks.length} ${result.picks.length === 1 ? 'Gericht' : 'Gerichte'} aus ${result.fetched} geprüften Rezepten.` +
+                  (gesund > 0 ? ` ${gesund} davon ausgewogen.` : '') +
+                  (result.unmatched.length > 0
+                    ? ` Für „${result.unmatched.join(', ')}" gab es nichts.`
+                    : ''),
+          },
+        ]);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : (err as Error).message);
+      } finally {
+        setLoading(false);
+        setInput('');
+        setTimeout(() => scroller.current?.scrollToEnd({ animated: true }), 60);
+      }
+    },
+    [days, language],
   );
 
-  const vorratAnteil = useMemo(() => {
-    if (!result || result.picks.length === 0) return 0;
-    return result.picks.reduce((s, p) => s + p.pantryShare, 0) / result.picks.length;
-  }, [result]);
+  /** Merkt sich die zuletzt gesuchten Begriffe für Ablehnungen. */
+  const letzte = useRef<string[]>([]);
 
-  if (recipes.length === 0) {
-    return (
-      <Screen>
-        <Header tone="pond" title="Woche planen" onBack={onBack} />
-        <View style={s.empty}>
-          <Text style={s.emptyTitle}>Noch keine Rezepte</Text>
-          <Text style={s.emptyText}>
-            Der Helfer wählt aus deinen eigenen Rezepten. Leg erst ein paar an
-            oder hol dir welche von Albert Heijn.
-          </Text>
-          <Button label="Zu den Rezepten" onPress={onManageRecipes} />
-        </View>
-      </Screen>
-    );
-  }
+  const senden = useCallback(() => {
+    const roh = input.trim();
+    if (!roh) return;
+    letzte.current = EGAL.test(roh)
+      ? []
+      : parseWishes(roh).map((w) => translateSearchQuery(w, language));
+    void frage(roh, rejected);
+  }, [input, language, rejected, frage]);
+
+  const ablehnen = useCallback(
+    (pick: AdvisorPick) => {
+      const naechste = [...rejected, pick.hit.id];
+      setRejected(naechste);
+      setTurns((t) => [...t, { from: 'du', text: `„${pick.recipe.title}" lieber nicht` }]);
+      void frage('', naechste, letzte.current);
+    },
+    [rejected, frage],
+  );
+
+  const uebernehmen = useCallback(() => {
+    if (!picks || picks.length === 0) return;
+    const plan = emptyWeek('week-1');
+    picks.forEach((p, i) => plan.days[WEEKDAYS[i % WEEKDAYS.length]].push(p.recipe.id));
+    onApply(plan, picks);
+  }, [picks, onApply]);
 
   return (
     <Screen>
       <Header
         tone="pond"
         title="Woche planen"
-        subtitle={`aus ${recipes.length} Rezepten${pantry.length > 0 ? ` · ${pantry.length} im Vorrat` : ''}`}
+        subtitle={`Rezepte von Albert Heijn${pantryCount > 0 ? ` · ${pantryCount} im Vorrat` : ''}`}
         onBack={onBack}
       />
 
-      <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
-        <View style={s.card}>
-          <Text style={s.label}>Worauf hast du Lust?</Text>
-          <TextInput
-            style={s.input}
-            value={wishes}
-            onChangeText={setWishes}
-            onSubmitEditing={planen}
-            placeholder="z. B. Pasta, was mit Hähnchen, schnell"
-            returnKeyType="search"
-            multiline
-          />
-
-          <View style={s.chips}>
-            {VORSCHLAEGE.map((v) => (
-              <Pressable
-                key={v}
-                onPress={() => anhaengen(v)}
-                style={({ pressed }) => [s.chip, pressed && s.chipPressed]}
-              >
-                <Text style={s.chipText}>{v}</Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <View style={s.daysRow}>
-            <Text style={s.label}>Für wie viele Tage?</Text>
-            <View style={s.daysPicker}>
-              {[3, 4, 5, 6, 7].map((n) => (
-                <Pressable
-                  key={n}
-                  onPress={() => setDays(n)}
-                  style={({ pressed }) => [
-                    s.dayBtn,
-                    days === n && s.dayBtnOn,
-                    pressed && s.chipPressed,
-                  ]}
-                >
-                  <Text style={[s.dayBtnText, days === n && s.dayBtnTextOn]}>{n}</Text>
-                </Pressable>
-              ))}
+      <ScrollView ref={scroller} contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
+        {turns.map((t, i) => (
+          <View key={i} style={[s.turn, t.from === 'du' && s.turnMine]}>
+            {t.from === 'kees' ? <Kees size={36} mood="content" /> : null}
+            <View style={[s.bubble, t.from === 'du' && s.bubbleMine]}>
+              <Text style={[s.bubbleText, t.from === 'du' && s.bubbleTextMine]}>{t.text}</Text>
             </View>
           </View>
+        ))}
 
-          <Button label="Woche vorschlagen" onPress={planen} />
+        {loading ? (
+          <View style={s.turn}>
+            <Kees size={36} mood="content" />
+            <View style={s.bubble}>
+              <ActivityIndicator size="small" />
+            </View>
+          </View>
+        ) : null}
 
-          <Text style={s.hint}>
-            Bewertet wird nach deinen Wünschen, danach was der Vorrat schon
-            deckt, danach wie viele Zutaten sich die Gerichte teilen — und
-            zuletzt nach den geschätzten Nährwerten. Preise kommen erst mit der
-            Einkaufsliste, damit der Vorschlag sofort dasteht.
-          </Text>
-        </View>
+        {error ? <Notice tone="warn">{error}</Notice> : null}
 
-        {result ? (
-          <>
-            {result.unmatchedWishes.length > 0 ? (
-              <Notice tone="warn">
-                Kein Rezept gefunden für: {result.unmatchedWishes.join(', ')}. Lege
-                eines an oder hol dir eines von Albert Heijn.
-              </Notice>
-            ) : null}
+        {picks && picks.length > 0 && !loading ? (
+          <View style={s.picks}>
+            {picks.map((p, i) => (
+              <View key={p.hit.id} style={s.pick}>
+                <View style={s.pickDay}>
+                  <Text style={s.pickDayText}>{WEEKDAY_SHORT[WEEKDAYS[i % WEEKDAYS.length]]}</Text>
+                </View>
+                <Monogram title={p.recipe.title} size={38} />
 
-            {result.picks.length > 0 ? (
-              <View style={s.summary}>
-                <Text style={s.summaryText}>
-                  {result.picks.length} {result.picks.length === 1 ? 'Gericht' : 'Gerichte'}
-                  {vorratAnteil > 0
-                    ? ` · im Schnitt ${Math.round(vorratAnteil * 100)} % aus dem Vorrat`
-                    : ''}
-                </Text>
-              </View>
-            ) : null}
-
-            {/* Der eigentliche Maßstab: Leert die Woche den Schrank? Was
-                liegen bleibt, verdirbt womöglich — deshalb steht es hier
-                namentlich und nicht als Prozentzahl allein. */}
-            {pantry.length > 0 && result.picks.length > 0 ? (
-              <View
-                style={[
-                  s.pantryResult,
-                  result.pantryLeftover.length === 0 && s.pantryResultDone,
-                ]}
-              >
-                <Text style={s.pantryResultTitle}>
-                  {result.pantryLeftover.length === 0
-                    ? 'Diese Woche braucht deinen Vorrat vollständig auf'
-                    : `${Math.round(result.pantryUsedShare * 100)} % des Vorrats werden aufgebraucht`}
-                </Text>
-                {result.pantryLeftover.length > 0 ? (
-                  <Text style={s.pantryResultText}>
-                    Bleibt liegen:{' '}
-                    {result.pantryLeftover
-                      .map((p) => `${p.name} (${p.quantity.amount} ${p.quantity.unit})`)
-                      .join(', ')}
-                    . Leg ein Rezept an, das es verwendet — oder nimm einen Tag mehr.
+                <View style={s.pickBody}>
+                  <Text style={s.pickTitle}>{p.recipe.title}</Text>
+                  <Text style={s.pickMeta}>
+                    {p.kcalPerServing ? `${p.kcalPerServing} kcal` : 'Nährwerte unbekannt'}
+                    {p.proteinPerServing ? ` · ${p.proteinPerServing} g Eiweiß` : ''}
+                    {` · ${p.ingredientCount} Zutaten`}
                   </Text>
-                ) : null}
-              </View>
-            ) : null}
+                  {p.reasons.length > 0 ? (
+                    <View style={s.reasons}>
+                      {p.reasons.map((r) => (
+                        <View key={r} style={s.reason}>
+                          <Text style={s.reasonText}>{r}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
 
-            {result.picks.map((pick, i) => (
-              <PickRow key={pick.recipe.id} pick={pick} index={i} />
+                <Pressable onPress={() => ablehnen(p)} hitSlop={8} style={s.rejectHit}>
+                  <Text style={s.reject}>nein</Text>
+                </Pressable>
+              </View>
             ))}
 
-            {result.picks.length > 0 ? (
-              <View style={s.apply}>
-                <Button
-                  label={`Diese ${result.picks.length} Gerichte übernehmen`}
-                  onPress={() => onApply(result.plan)}
-                />
-                <Text style={s.applyHint}>
-                  Überschreibt deinen aktuellen Wochenplan. Umstellen kannst du
-                  danach alles.
-                </Text>
-              </View>
-            ) : null}
-          </>
+            <View style={s.apply}>
+              <Button label={`Diese ${picks.length} Gerichte übernehmen`} onPress={uebernehmen} />
+              <Text style={s.applyHint}>
+                Die Rezepte landen in deinem Buch und auf den Wochentagen. Der Preis
+                steht danach in der Einkaufsliste.
+              </Text>
+            </View>
+          </View>
         ) : null}
       </ScrollView>
+
+      <View style={s.composer}>
+        <View style={s.chips}>
+          {ANREGUNGEN.map((a) => (
+            <Pressable
+              key={a}
+              onPress={() => setInput((v) => (v.trim() ? `${v.trim()}, ${a}` : a))}
+              style={({ pressed }) => [s.chip, pressed && s.pressed]}
+            >
+              <Text style={s.chipText}>{a}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={s.daysRow}>
+          <Text style={s.daysLabel}>Tage</Text>
+          {[3, 4, 5, 6, 7].map((n) => (
+            <Pressable
+              key={n}
+              onPress={() => setDays(n)}
+              style={({ pressed }) => [s.dayBtn, days === n && s.dayBtnOn, pressed && s.pressed]}
+            >
+              <Text style={[s.dayBtnText, days === n && s.dayBtnTextOn]}>{n}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={s.inputRow}>
+          <TextInput
+            style={s.input}
+            value={input}
+            onChangeText={setInput}
+            onSubmitEditing={senden}
+            placeholder="Worauf hast du Lust?"
+            returnKeyType="send"
+            editable={!loading}
+          />
+          <Pressable
+            onPress={senden}
+            disabled={loading}
+            style={({ pressed }) => [s.send, (pressed || loading) && s.pressed]}
+          >
+            <Text style={s.sendText}>{loading ? '…' : 'Fragen'}</Text>
+          </Pressable>
+        </View>
+      </View>
     </Screen>
   );
 }
 
-function PickRow({ pick, index }: { pick: PlannerPick; index: number }) {
-  return (
-    <View style={s.pick}>
-      <View style={s.pickDay}>
-        <Text style={s.pickDayText}>{WEEKDAY_SHORT[WEEKDAYS[index % WEEKDAYS.length]]}</Text>
-      </View>
-
-      <Monogram title={pick.recipe.title} size={38} />
-
-      <View style={s.pickBody}>
-        <Text style={s.pickTitle}>{pick.recipe.title}</Text>
-        <Text style={s.pickMeta}>
-          {pick.kcalPerServing !== null ? `ca. ${pick.kcalPerServing} kcal je Portion` : 'Nährwerte unbekannt'}
-        </Text>
-
-        {/* Der Grund gehört an die Zeile, nicht in eine Fußnote: Ein
-            Vorschlag ohne Begründung müsste man glauben. */}
-        {pick.reasons.length > 0 ? (
-          <View style={s.reasons}>
-            {pick.reasons.map((r) => (
-              <View key={r.label} style={[s.reason, r.kind === 'wunsch' && s.reasonWish]}>
-                <Text style={[s.reasonText, r.kind === 'wunsch' && s.reasonTextWish]}>
-                  {r.label}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
-      </View>
-    </View>
-  );
-}
-
 const s = StyleSheet.create({
-  body: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
+  body: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xl },
 
-  card: {
+  turn: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  turnMine: { justifyContent: 'flex-end' },
+  bubble: {
+    flex: 1,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    borderWidth: 2,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  label: { fontFamily: fonts.heading, fontSize: 14, fontWeight: '700', color: colors.text },
-  input: {
-    minHeight: 62,
-    backgroundColor: colors.surfaceWarm,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    fontSize: 15,
-    textAlignVertical: 'top',
-  },
-
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: {
-    minHeight: 36,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.pill,
-    backgroundColor: colors.successBg,
     borderWidth: 1,
     borderColor: colors.border,
-  },
-  chipPressed: { opacity: 0.7 },
-  chipText: { fontSize: 13, color: colors.primaryDeep, fontWeight: '600' },
-
-  daysRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap' },
-  daysPicker: { flexDirection: 'row', gap: spacing.xs, marginLeft: 'auto' },
-  dayBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayBtnOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  dayBtnText: { fontFamily: fonts.heading, fontSize: 15, fontWeight: '700', color: colors.textMuted },
-  dayBtnTextOn: { color: colors.onDark },
-
-  hint: { fontSize: 11, color: colors.textFaint, lineHeight: 17 },
-
-  pantryResult: {
-    backgroundColor: colors.sunSoft,
-    borderRadius: radius.md,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.sun,
     padding: spacing.md,
-    gap: 3,
   },
-  pantryResultDone: { backgroundColor: colors.successBg, borderLeftColor: colors.frog },
-  pantryResultTitle: { fontFamily: fonts.heading, fontSize: 13, fontWeight: '700', color: colors.text },
-  pantryResultText: { fontSize: 12, color: colors.textMuted, lineHeight: 17 },
+  bubbleMine: {
+    flex: 0,
+    maxWidth: '80%',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  bubbleText: { fontSize: 14, color: colors.text, lineHeight: 20 },
+  bubbleTextMine: { color: colors.onDark },
 
-  summary: { paddingHorizontal: spacing.xs },
-  summaryText: { fontFamily: fonts.heading, fontSize: 13, fontWeight: '700', color: colors.textMuted },
-
+  picks: { gap: spacing.sm, marginTop: spacing.sm },
   pick: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -312,18 +315,22 @@ const s = StyleSheet.create({
     padding: spacing.md,
   },
   pickDay: {
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
     borderRadius: radius.sm,
     backgroundColor: colors.successBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pickDayText: { fontFamily: fonts.heading, fontSize: 12, fontWeight: '800', color: colors.primaryDeep },
+  pickDayText: {
+    fontFamily: fonts.heading,
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.primaryDeep,
+  },
   pickBody: { flex: 1, gap: 3 },
-  pickTitle: { fontFamily: fonts.heading, fontSize: 15, fontWeight: '700', color: colors.text },
-  pickMeta: { fontSize: 12, color: colors.textMuted },
-
+  pickTitle: { fontFamily: fonts.heading, fontSize: 14, fontWeight: '700', color: colors.text },
+  pickMeta: { fontSize: 11, color: colors.textMuted },
   reasons: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: 2 },
   reason: {
     paddingHorizontal: spacing.sm,
@@ -331,14 +338,68 @@ const s = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: colors.bg,
   },
-  reasonWish: { backgroundColor: colors.sunSoft },
-  reasonText: { fontSize: 11, color: colors.textMuted },
-  reasonTextWish: { color: colors.seed, fontWeight: '700' },
+  reasonText: { fontSize: 10.5, color: colors.textMuted },
+  rejectHit: { minHeight: 44, minWidth: 40, justifyContent: 'center', alignItems: 'flex-end' },
+  reject: { fontSize: 12, color: colors.textMuted, textDecorationLine: 'underline' },
 
-  apply: { gap: spacing.sm, marginTop: spacing.sm },
+  apply: { gap: spacing.sm, marginTop: spacing.md },
   applyHint: { fontSize: 11, color: colors.textFaint, textAlign: 'center', lineHeight: 16 },
 
-  empty: { alignItems: 'center', gap: spacing.md, padding: spacing.xxl },
-  emptyTitle: { fontFamily: fonts.heading, fontSize: 17, fontWeight: '700', color: colors.text },
-  emptyText: { fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 21 },
+  composer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surfaceWarm,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  chip: {
+    minHeight: 32,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.successBg,
+  },
+  chipText: { fontSize: 12, color: colors.primaryDeep, fontWeight: '600' },
+  pressed: { opacity: 0.7 },
+
+  daysRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  daysLabel: { fontSize: 12, color: colors.textMuted, marginRight: spacing.xs },
+  dayBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayBtnOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  dayBtnText: {
+    fontFamily: fonts.heading,
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textMuted,
+  },
+  dayBtnTextOn: { color: colors.onDark },
+
+  inputRow: { flexDirection: 'row', gap: spacing.sm },
+  input: {
+    flex: 1,
+    minHeight: 46,
+    backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    fontSize: 15,
+  },
+  send: {
+    minHeight: 46,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
+  },
+  sendText: { fontFamily: fonts.heading, fontSize: 15, fontWeight: '700', color: colors.onDark },
 });

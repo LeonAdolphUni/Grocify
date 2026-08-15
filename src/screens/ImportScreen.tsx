@@ -1,76 +1,123 @@
 /**
  * Rezepte aus Albert Heijns Allerhande ins eigene Buch holen.
  *
- * Suchen, antippen, fertig.
+ * Zwei Reiter, weil es zwei verschiedene Absichten sind:
  *
- * **Warum AH und nicht mehr Chefkoch.** Ein deutsches Rezept muss übersetzt
- * werden, bevor man es im niederländischen Regal suchen kann — und genau
- * diese Kette war die größte Fehlerquelle der App. Allerhande-Rezepte tragen
- * die Namen, unter denen AH die Produkte verkauft: Was hier importiert wird,
- * gibt es im Laden. Gemessen an einem echten Rezept: 91 % der Zutaten finden
- * sofort ihr Produkt, gegenüber deutlich weniger beim deutschen Weg.
+ *   **Suchen** — du weißt, was du willst, und tippst es ein.
+ *   **Stöbern** — du weißt es nicht und willst sehen, was es gibt.
  *
- * Was übernommen wird, ist eine bewusste Auswahl: Titel, Portionen, Zutaten,
- * Nährwerte und der Link zum Original. **Der Zubereitungstext bleibt drüben** —
- * Zutatenlisten sind in der Regel nicht urheberrechtlich geschützt,
- * Zubereitungstexte schon, und zum Planen eines Einkaufs braucht die App sie
- * nicht.
+ * Ein Suchfeld allein bedient nur die erste. Wer nicht weiß, wonach er suchen
+ * soll, steht davor wie vor einer leeren Seite.
+ *
+ * **Die Suche übersetzt.** Allerhande ist niederländisch; wer „Eiersalat"
+ * eingibt, sucht dort nach einem Wort, das es nicht gibt, und bekommt nichts.
+ * Der Begriff wird deshalb vor der Suche übersetzt — und die Übersetzung steht
+ * sichtbar unter dem Feld. Wer „Eiersalat" tippt und Ergebnisse zu
+ * „eiersalade" bekommt, soll den Grund sehen; und wenn es einmal danebengeht,
+ * auch den Fehler.
+ *
+ * **Warum AH und nicht mehr Chefkoch.** Allerhande-Rezepte tragen die Namen,
+ * unter denen AH die Produkte verkauft: Was hier importiert wird, gibt es im
+ * Laden. Gemessen an fünf Rezepten: 88 % der Zutaten finden sofort ihr Produkt.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 
-import { ApiError, api, type ImportHit } from '../api/client';
+import { ApiError, api, type ImportHit, type RecipeCategory } from '../api/client';
+import {
+  describeTranslation,
+  SEARCH_LANGUAGES,
+  type SearchLanguage,
+} from '../domain/searchLanguage';
 import { Header, Notice, Screen } from '../ui/components';
 import { DownloadIcon } from '../ui/icons';
 import { Monogram } from '../ui/Monogram';
-import { colors, radius, spacing } from '../ui/theme';
+import { colors, fonts, radius, spacing } from '../ui/theme';
 
 interface Props {
+  language: SearchLanguage;
+  onChangeLanguage: (l: SearchLanguage) => void;
   onImported: (title: string) => void;
   onBack: () => void;
 }
 
-export function ImportScreen({ onImported, onBack }: Props) {
+type Tab = 'suche' | 'katalog';
+
+export function ImportScreen({ language, onChangeLanguage, onImported, onBack }: Props) {
+  const [tab, setTab] = useState<Tab>('suche');
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<ImportHit[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** Welcher Treffer gerade übernommen wird. */
   const [importing, setImporting] = useState<string | null>(null);
-  /** Rezept-ID → war es neu oder lag es schon im Buch? */
   const [done, setDone] = useState<Record<string, 'neu' | 'schon da'>>({});
 
+  const [categories, setCategories] = useState<RecipeCategory[]>([]);
+  const [group, setGroup] = useState<string | null>(null);
+  const [activeSlug, setActiveSlug] = useState<string | null>(null);
+
+  const uebersetzung = useMemo(() => describeTranslation(query, language), [query, language]);
+
+  useEffect(() => {
+    void api
+      .listCategories()
+      .then((c) => {
+        setCategories(c);
+        setGroup((g) => g ?? c[0]?.group ?? null);
+      })
+      .catch(() => {
+        // Der Katalog ist Beiwerk — die Suche funktioniert auch ohne ihn.
+      });
+  }, []);
+
+  const groups = useMemo(() => [...new Set(categories.map((c) => c.group))], [categories]);
+
   const search = useCallback(async () => {
-    const term = query.trim();
-    if (!term) return;
+    if (!query.trim()) return;
     setLoading(true);
     setError(null);
+    setActiveSlug(null);
     try {
-      setHits(await api.searchImport(term));
+      // Übersetzt wird hier, nicht im Backend: Die Oberfläche zeigt an, wonach
+      // sie sucht, und beides muss dieselbe Zeichenkette sein.
+      setHits(await api.searchImport(uebersetzung.translated));
     } catch (err) {
       setHits(null);
       setError(err instanceof ApiError ? err.message : (err as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [query]);
+  }, [query, uebersetzung.translated]);
+
+  const openCategory = useCallback(async (slug: string) => {
+    setActiveSlug(slug);
+    setLoading(true);
+    setError(null);
+    try {
+      setHits(await api.browseCategory(slug));
+    } catch (err) {
+      setHits(null);
+      setError(err instanceof ApiError ? err.message : (err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const doImport = useCallback(
     async (hit: ImportHit) => {
       setImporting(hit.id);
       setError(null);
       try {
-        // Der Pfad enthält die ID und den Slug — AH braucht beides.
         const result = await api.importRecipe(hit.path);
         setDone((d) => ({ ...d, [hit.id]: result.alreadyInBook ? 'schon da' : 'neu' }));
         onImported(result.recipe.title);
@@ -83,32 +130,123 @@ export function ImportScreen({ onImported, onBack }: Props) {
     [onImported],
   );
 
+  const sprache = SEARCH_LANGUAGES.find((l) => l.id === language) ?? SEARCH_LANGUAGES[0];
+
   return (
     <Screen>
       <Header
-        title="Rezept holen"
+        tone="sun"
+        title="Rezepte holen"
         subtitle="Albert Heijn Allerhande"
         onBack={onBack}
-        tone="sun"
+        extra={
+          <View style={s.tabs}>
+            {(['suche', 'katalog'] as Tab[]).map((t) => (
+              <Pressable
+                key={t}
+                onPress={() => {
+                  setTab(t);
+                  setHits(null);
+                  setError(null);
+                  setActiveSlug(null);
+                }}
+                style={({ pressed }) => [s.tab, tab === t && s.tabOn, pressed && s.pressed]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: tab === t }}
+              >
+                <Text style={[s.tabText, tab === t && s.tabTextOn]}>
+                  {t === 'suche' ? 'Suchen' : 'Stöbern'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        }
       />
 
-      <View style={s.searchBar}>
-        <TextInput
-          style={s.input}
-          value={query}
-          onChangeText={setQuery}
-          onSubmitEditing={search}
-          placeholder="z. B. pasta, kip, soep, salade"
-          returnKeyType="search"
-          autoFocus
-        />
-        <Pressable
-          onPress={search}
-          style={({ pressed }) => [s.btn, pressed && s.pressed]}
-        >
-          <Text style={s.btnText}>Suchen</Text>
-        </Pressable>
-      </View>
+      {tab === 'suche' ? (
+        <View style={s.searchArea}>
+          <View style={s.langRow}>
+            <Text style={s.langLabel}>Ich suche auf</Text>
+            {SEARCH_LANGUAGES.map((l) => (
+              <Pressable
+                key={l.id}
+                onPress={() => onChangeLanguage(l.id)}
+                style={({ pressed }) => [
+                  s.langBtn,
+                  language === l.id && s.langBtnOn,
+                  pressed && s.pressed,
+                ]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: language === l.id }}
+              >
+                <Text style={[s.langText, language === l.id && s.langTextOn]}>{l.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <View style={s.searchBar}>
+            <TextInput
+              style={s.input}
+              value={query}
+              onChangeText={setQuery}
+              onSubmitEditing={search}
+              placeholder={sprache.hint}
+              returnKeyType="search"
+            />
+            <Pressable onPress={search} style={({ pressed }) => [s.btn, pressed && s.pressed]}>
+              <Text style={s.btnText}>Suchen</Text>
+            </Pressable>
+          </View>
+
+          {uebersetzung.changed ? (
+            <Text style={s.translated}>
+              gesucht wird nach{' '}
+              <Text style={s.translatedStrong}>{uebersetzung.translated}</Text>
+            </Text>
+          ) : null}
+        </View>
+      ) : (
+        <View style={s.catalogArea}>
+          {/* Zwei Ebenen statt einer langen Liste: oben die Gruppe, darunter
+              die Kategorie. 21 Kacheln nebeneinander wären keine Ordnung,
+              sondern eine Wand. */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.groupRow}>
+            {groups.map((g) => (
+              <Pressable
+                key={g}
+                onPress={() => setGroup(g)}
+                style={({ pressed }) => [
+                  s.groupBtn,
+                  group === g && s.groupBtnOn,
+                  pressed && s.pressed,
+                ]}
+              >
+                <Text style={[s.groupText, group === g && s.groupTextOn]}>{g}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <View style={s.chips}>
+            {categories
+              .filter((c) => c.group === group)
+              .map((c) => (
+                <Pressable
+                  key={c.slug}
+                  onPress={() => openCategory(c.slug)}
+                  style={({ pressed }) => [
+                    s.chip,
+                    activeSlug === c.slug && s.chipOn,
+                    pressed && s.pressed,
+                  ]}
+                >
+                  <Text style={[s.chipText, activeSlug === c.slug && s.chipTextOn]}>
+                    {c.label}
+                  </Text>
+                </Pressable>
+              ))}
+          </View>
+        </View>
+      )}
 
       {error ? <Notice tone="warn">{error}</Notice> : null}
 
@@ -123,11 +261,13 @@ export function ImportScreen({ onImported, onBack }: Props) {
           ListEmptyComponent={
             error ? null : (
               <View style={s.empty}>
-                <DownloadIcon size={34} color={colors.textFaint} />
+                <DownloadIcon size={32} color={colors.textFaint} />
                 <Text style={s.emptyText}>
                   {hits === null
-                    ? 'Suche auf Niederländisch — „pasta", „kip", „soep". Übernommen werden Titel, Portionen, Zutaten und Nährwerte; die Zubereitung bleibt bei Albert Heijn, dorthin führt ein Link.'
-                    : 'Keine Treffer. Versuch einen anderen Begriff.'}
+                    ? tab === 'suche'
+                      ? `Tipp ein, worauf du Lust hast — auf ${sprache.label}. Der Begriff wird für Albert Heijn übersetzt.`
+                      : 'Wähle eine Kategorie, um zu sehen, was es gibt.'
+                    : 'Keine Treffer. Versuch einen anderen Begriff oder eine andere Kategorie.'}
                 </Text>
               </View>
             )
@@ -141,29 +281,18 @@ export function ImportScreen({ onImported, onBack }: Props) {
                 disabled={Boolean(state) || busy}
                 style={({ pressed }) => [s.row, pressed && s.rowPressed, state && s.rowDone]}
               >
-                {item.imageUrl ? (
-                  <Image source={{ uri: item.imageUrl }} style={s.thumb} />
-                ) : (
-                  <Monogram title={item.title} size={46} />
-                )}
-
+                <Monogram title={item.title} size={44} />
                 <View style={s.body}>
                   <Text style={s.title} numberOfLines={2}>
                     {item.title}
                   </Text>
-                  <Text style={s.meta}>Albert Heijn Allerhande</Text>
+                  <Text style={s.meta}>Allerhande</Text>
                 </View>
-
                 <View style={s.action}>
                   {busy ? (
                     <ActivityIndicator size="small" />
                   ) : state ? (
-                    // „schon da" statt „✓" ist keine Kosmetik: Sonst denkt
-                    // man, gerade sei etwas passiert, und sucht in der Liste
-                    // nach einem zweiten Eintrag.
-                    <Text style={s.doneText}>
-                      {state === 'neu' ? '✓ im Buch' : 'schon da'}
-                    </Text>
+                    <Text style={s.doneText}>{state === 'neu' ? 'im Buch' : 'schon da'}</Text>
                   ) : (
                     <Text style={s.addText}>+ holen</Text>
                   )}
@@ -187,25 +316,90 @@ export function ImportScreen({ onImported, onBack }: Props) {
 }
 
 const s = StyleSheet.create({
-  searchBar: { flexDirection: 'row', paddingHorizontal: spacing.xl, gap: spacing.sm },
+  tabs: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.md },
+  tab: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(58,42,0,0.10)',
+  },
+  tabOn: { backgroundColor: '#3a2a00' },
+  tabText: { fontFamily: fonts.heading, fontSize: 13, fontWeight: '700', color: '#3a2a00' },
+  tabTextOn: { color: colors.sunSoft },
+  pressed: { opacity: 0.75 },
+
+  searchArea: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, gap: spacing.sm },
+  langRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexWrap: 'wrap' },
+  langLabel: { fontSize: 12, color: colors.textMuted, marginRight: spacing.xs },
+  langBtn: {
+    minHeight: 32,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  langBtnOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  langText: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+  langTextOn: { color: colors.onDark },
+
+  searchBar: { flexDirection: 'row', gap: spacing.sm },
   input: {
     flex: 1,
+    minHeight: 48,
     backgroundColor: colors.surface,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
     fontSize: 15,
   },
   btn: {
+    minHeight: 48,
+    justifyContent: 'center',
     backgroundColor: colors.primary,
     borderRadius: radius.md,
     paddingHorizontal: spacing.lg,
-    justifyContent: 'center',
   },
-  pressed: { opacity: 0.75 },
-  btnText: { color: colors.onDark, fontWeight: '700', fontSize: 15 },
+  btnText: { fontFamily: fonts.heading, color: colors.onDark, fontWeight: '700', fontSize: 15 },
+  translated: { fontSize: 12, color: colors.textFaint },
+  translatedStrong: { color: colors.primary, fontWeight: '700' },
+
+  catalogArea: { paddingTop: spacing.md, gap: spacing.md },
+  groupRow: { paddingHorizontal: spacing.xl, flexGrow: 0 },
+  groupBtn: {
+    minHeight: 38,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    marginRight: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  groupBtnOn: { backgroundColor: colors.primaryDeep, borderColor: colors.primaryDeep },
+  groupText: { fontFamily: fonts.heading, fontSize: 13, fontWeight: '700', color: colors.textMuted },
+  groupTextOn: { color: colors.onDark },
+
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+  },
+  chip: {
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  chipOn: { backgroundColor: colors.sun, borderColor: colors.sunDeep },
+  chipText: { fontSize: 13, fontWeight: '600', color: colors.primaryDeep },
+  chipTextOn: { color: '#3a2a00', fontWeight: '700' },
 
   loader: { marginTop: 48 },
   list: { padding: spacing.lg, gap: spacing.sm },
@@ -222,20 +416,16 @@ const s = StyleSheet.create({
   },
   rowPressed: { borderColor: colors.sun },
   rowDone: { backgroundColor: colors.successBg, borderColor: colors.frog },
-  thumb: { width: 62, height: 62, borderRadius: radius.md, backgroundColor: colors.sunSoft },
-  thumbEmpty: { alignItems: 'center', justifyContent: 'center' },
-  thumbIcon: { fontSize: 26 },
   body: { flex: 1 },
-  title: { fontSize: 15, fontWeight: '700', color: colors.text },
-  subtitle: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  meta: { fontSize: 11, color: colors.textFaint, marginTop: 3 },
+  title: { fontFamily: fonts.heading, fontSize: 15, fontWeight: '700', color: colors.text },
+  meta: { fontSize: 11, color: colors.textFaint, marginTop: 2 },
   action: { minWidth: 62, alignItems: 'flex-end' },
   addText: { fontSize: 13, fontWeight: '700', color: colors.primary },
   doneText: { fontSize: 12, fontWeight: '700', color: colors.frog },
 
-  empty: { alignItems: 'center', paddingTop: 56, paddingHorizontal: spacing.xl, gap: spacing.md },
-  emptyIcon: { fontSize: 34 },
+  empty: { alignItems: 'center', paddingTop: 48, paddingHorizontal: spacing.xl, gap: spacing.md },
   emptyText: { fontSize: 14, color: colors.textFaint, textAlign: 'center', lineHeight: 21 },
+
   foot: {
     fontSize: 11,
     color: colors.textFaint,

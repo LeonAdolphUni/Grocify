@@ -218,6 +218,20 @@ export default function App() {
     [pantry],
   );
 
+  /** Sprache der Rezeptsuche umstellen. */
+  const changeSearchLanguage = useCallback(
+    async (searchLanguage: Settings['searchLanguage']) => {
+      const next: Settings = { ...settings, searchLanguage };
+      setSettings(next);
+      try {
+        setSettings(await api.saveSettings(next));
+      } catch {
+        // Nicht der Rede wert — die Suche nutzt den Wert im Speicher.
+      }
+    },
+    [settings],
+  );
+
   const handleSave = useCallback(
     async (recipe: Recipe) => {
       try {
@@ -424,6 +438,8 @@ export default function App() {
 
       {route.name === 'import' && (
         <ImportScreen
+          language={settings.searchLanguage ?? 'de'}
+          onChangeLanguage={changeSearchLanguage}
           onImported={handleImported}
           onBack={() => setRoute({ name: 'recipes' })}
         />
@@ -445,18 +461,26 @@ export default function App() {
 
       {route.name === 'planner' && (
         <PlannerScreen
-          recipes={scaledRecipes}
-          pantry={pantry}
-          onApply={(vorschlag) => {
+          language={settings.searchLanguage ?? 'de'}
+          pantryCount={pantry.length}
+          onApply={async (vorschlag, picks) => {
             const vorher = plan;
-            void updatePlan({ ...vorschlag, id: plan.id, name: plan.name });
-            setRoute({ name: 'week' });
-            setToast({
-              text: 'Wochenplan übernommen',
-              action: { label: 'Rückgängig', run: () => updatePlan(vorher) },
-            });
+            try {
+              // Die vorgeschlagenen Rezepte kommen von Albert Heijn und
+              // liegen noch nicht im Buch — erst speichern, dann planen.
+              // Andersherum stünde im Plan ein Verweis auf nichts.
+              for (const p of picks) await api.saveRecipe(p.recipe);
+              setRecipes(await api.listRecipes());
+              await updatePlan({ ...vorschlag, id: plan.id, name: plan.name });
+              setRoute({ name: 'week' });
+              setToast({
+                text: `${picks.length} Gerichte übernommen`,
+                action: { label: 'Rückgängig', run: () => updatePlan(vorher) },
+              });
+            } catch (err) {
+              setFatal(err instanceof ApiError ? err.message : (err as Error).message);
+            }
           }}
-          onManageRecipes={() => setRoute({ name: 'recipes' })}
           onBack={() => setRoute({ name: 'home' })}
         />
       )}
