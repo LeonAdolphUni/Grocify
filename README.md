@@ -19,8 +19,12 @@ Der komplette Ablauf funktioniert Ende zu Ende:
 → **Einkaufsliste** mit Mengen, Packungen und Gesamtpreis, gruppiert nach
 Ladenabteilung.
 
-Rezepte werden derzeit von Hand eingetragen. Der Import aus Text, Link und
-Foto über die Claude API folgt in Sprint 3–5.
+Rezepte legst du selbst an — Zutaten als Freitext, „Milch 0,5 l" reicht — oder
+holst sie dir **von Chefkoch** ins eigene Buch. Der Import aus Link und Foto
+über die Claude API folgt in Sprint 4–5.
+
+Dazu gibt es eine **Landingpage** unter `landing/index.html` (statisch, ohne
+Build; die Spezifikation dazu liegt in [`DESIGN.md`](DESIGN.md)).
 
 ## Ablauf
 
@@ -184,33 +188,50 @@ beschränkt.
 ## Struktur
 
 ```
+server/               Backend — eigener Prozess
+  db.ts               SQLite-Schema und Datenzugriff
+  api.ts              HTTP-Routen
+  chefkoch.ts         Rezept-Import
+  index.ts            Einstiegspunkt
 src/
   domain/             Reine Logik — kein Netzwerk, keine UI, voll testbar
     units.ts          Einheiten (g, ml, EL, TL, Prise, Bund …) und Umrechnung
-    types.ts          Ingredient, Recipe, Product, ShoppingList
+    types.ts          Ingredient, Recipe, Product, ShoppingList, Kennzahlen
     translate.ts      DE→NL-Zutatenwörterbuch, Vorratsware-Erkennung
+    parseIngredient.ts  Freitext („Milch 0,5 l") in Menge + Einheit + Name
     shoppingList.ts   Zutaten zusammenfassen, Produkte wählen, Preise rechnen
+    weekPlan.ts       Wochenplan — Tage, Gerichte, Kennzahlen
+    leftoverUse.ts    Welches Rezept verbraucht die Reste?
   supermarkets/
     types.ts          PriceProvider-Interface — Abstraktion über Datenquellen
     albertHeijn.ts    Albert-Heijn-Anbindung
-    jumbo.ts          Jumbo — derzeit nicht verfügbar, dokumentiert warum
+    jumbo.ts          Jumbo — nicht verfügbar, dokumentiert warum
     registry.ts       Verzeichnis der Anbieter
-  storage/
-    recipeStore.ts    Rezepte speichern (AsyncStorage: Browser + Gerät)
-  screens/            Die vier Schritte des Ablaufs
-  ui/                 Theme und wiederverwendete Bausteine
-scripts/
-  smoke-ah.ts         Datenquelle testen
-  smoke-list.ts       Einkaufslisten-Logik gegen echte Daten testen
+  api/client.ts       spricht mit dem Backend
+  screens/            Die Schritte des Ablaufs
+  ui/                 Theme, Kees, Sonnenblume, Bewegung
+scripts/              Messwerkzeuge, siehe unten
+landing/              Landingpage (statisch, ohne Build) — Spec in DESIGN.md
 App.tsx               Navigation
 ```
+
+Es gibt **kein** `src/storage/` mehr. Rezepte lagen früher im Browserspeicher;
+seit der Umstellung auf das Backend liegen sie in der Datenbankdatei.
 
 ## Datenquellen
 
 | Markt | Stand | Anmerkung |
 |---|---|---|
 | **Albert Heijn** | funktioniert | Anonymer Token ohne Account, Produktsuche, Preise, Aktionen, Abteilungen |
-| **Jumbo** | blockiert | Antwortet mit HTTP 403 / Timeout (geprüft 08/2026) |
+| **Jumbo** | abgeschaltet | `mobileapi.jumbo.com` antwortet auf alles mit **404** (geprüft 14.08.2026) |
+| **Chefkoch** | funktioniert | Rezept-Import über das App-Backend, keine offizielle API |
+
+Bei Jumbo ist die Veränderung aufschlussreich: Am 11.08. kam noch ein **403**,
+drei Tage später ein **404**. „Du darfst nicht" wurde zu „hier ist nichts mehr".
+Zwei Wege existieren technisch noch — die interne GraphQL-Schnittstelle der
+Website und deren HTML —, beide sind bewusst nicht gegangen: Die eine verlangt
+das Umgehen eines CSRF-Schutzes, die andere ist in `robots.txt` ausdrücklich
+für die Produktsuche gesperrt. Details stehen im Kopf von `src/supermarkets/jumbo.ts`.
 
 ⚠️ **Wichtig:** Die AH-Anbindung nutzt das interne Mobile-Backend der
 Appie-App. Das ist **keine offizielle, lizenzierte API** — es gibt keine
@@ -242,13 +263,42 @@ Klassentausch, kein Umbau der App.
 | Sprint | Inhalt | Status |
 |---|---|---|
 | 0 | Projektgerüst, AH-Durchstich | ✅ |
-| 1 | Domänenkern: Einheiten, Typen | ✅ (Tests fehlen noch) |
+| 1 | Domänenkern: Einheiten, Typen | ✅ — **Tests fehlen weiterhin, siehe unten** |
 | 2 | Screens: Rezepte, Supermarkt, Einkaufsliste | ✅ |
-| 3 | Rezept-Parsing (Text) via Claude API | offen |
+| 3 | Rezept-Parsing (Freitext, ohne LLM) | ✅ — `parseIngredient.ts`, 24 Fälle |
+| 3b | Rezept-Import von Chefkoch | ✅ |
 | 4 | Import per Link (schema.org/Recipe JSON-LD) | offen |
 | 5 | Import per Foto (Claude Vision) | offen |
 | 6 | Zutaten-Normalisierung per LLM statt Wörterbuch | offen |
 | 7 | Produkt-Matching per LLM statt Wortzählung | offen |
-| 8 | Einkaufsliste verfeinern (Produkt tauschen, Mengen anpassen) | ✅ Grundlage steht |
-| 9 | Persistenz | ✅ (AsyncStorage; SQLite bei Bedarf) |
-| 10 | Build, Release | offen |
+| 8 | Einkaufsliste verfeinern (Produkt tauschen, Mengen anpassen) | ✅ |
+| 9 | Persistenz | ✅ — SQLite über `node:sqlite`, eigenes Backend |
+| 10 | Wochenplan, Verwertungsquote, Restenutzung | ✅ |
+| 11 | Landingpage | ✅ — `landing/`, Spec in `DESIGN.md` |
+| 12 | Build, Release | offen |
+
+### Die größte offene Lücke: Tests
+
+Es gibt Messwerkzeuge, aber keinen einzigen automatisierten Test. Ausgerechnet
+`shoppingList.ts` — die Produktauswahl — wurde mehrfach von Hand nachjustiert,
+zuletzt mit dem Rückfall aufs Grundwort („hokkaido pompoen" → „pompoen").
+Kontrolliert wurde jedes Mal, indem `npm run try:week` lief und die Zahl mit
+der vorherigen verglichen wurde: **40,17 € bei 85 % Verwertung.**
+
+Das ist ein Test — nur von Hand, und gegen ein Sortiment, dessen Preise sich
+täglich ändern. `node:test` ist in Node eingebaut und bräuchte keine neue
+Abhängigkeit. Vor Sprint 6/7 sollte das stehen: Wer die Zuordnung auf ein LLM
+umstellt, ändert genau den Teil, für den es bisher keine Absicherung gibt.
+
+### Messwerkzeuge
+
+| Befehl | Was er misst |
+|---|---|
+| `npm run typecheck` | TypeScript |
+| `npm run smoke` | Albert-Heijn-Anbindung |
+| `npm run smoke:api` | Backend Ende zu Ende (eigene Wegwerf-Datenbank) |
+| `npm run smoke:parse` | Zutaten-Parser, 24 Fälle |
+| `npm run smoke:list` | Einkaufslisten-Logik gegen echte Preise |
+| `npm run check:dict` | jeden Wörterbucheintrag gegen den echten Katalog |
+| `npm run try:week` | Wochenplan: Ersparnis, Verwertung, Preis je Portion |
+| `npm run try:import` | Chefkoch-Import bis zum fertigen Preis |
