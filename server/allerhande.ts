@@ -59,6 +59,13 @@ export interface RecipeHit {
   title: string;
   /** Pfad ohne Domain — wird zum Nachladen gebraucht. */
   path: string;
+  /**
+   * Vorschaubild von AHs Bildserver.
+   *
+   * Fehlt, wenn es sich aus dem Seitengerüst nicht sicher zuordnen ließ —
+   * dann zeigt die Oberfläche das Monogramm. Ein fehlendes Bild ist
+   * harmlos, ein falsch zugeordnetes wäre es nicht.
+   */
   imageUrl?: string;
 }
 
@@ -85,6 +92,15 @@ export interface AllerhandeNutrition {
  */
 const MIN_ABSTAND_MS = 1000;
 
+/**
+ * Statuscodes, die „gleich wieder" bedeuten und nicht „nie".
+ *
+ * Alle drei wurden im Betrieb beobachtet: 403 bei schnellen Abrufen
+ * hintereinander, 429 als reguläre Drosselung, 503 nach längerem intensiven
+ * Zugriff. Keiner davon heißt, dass die Seite weg ist.
+ */
+const VORUEBERGEHEND = new Set([403, 429, 503]);
+
 let letzterAufruf = 0;
 
 /** Wartet, bis der Mindestabstand seit dem letzten Aufruf vergangen ist. */
@@ -106,18 +122,24 @@ async function getHtml(path: string, versuch = 0): Promise<string> {
     throw new AllerhandeError(`Albert Heijn nicht erreichbar: ${(err as Error).message}`);
   }
 
-  // 403 und 429 heißen „zu schnell", nicht „nie wieder". Einmal warten und
-  // erneut versuchen, dann aufgeben — eine Schleife wäre genau das Verhalten,
-  // gegen das die Sperre sich richtet.
-  if ((res.status === 403 || res.status === 429) && versuch < 2) {
+  // 403, 429 und 503 heißen „zu schnell", nicht „nie wieder". Einmal warten
+  // und erneut versuchen, dann aufgeben — eine Schleife wäre genau das
+  // Verhalten, gegen das die Sperre sich richtet.
+  //
+  // **503 kam erst durch Messen dazu.** Beim Entwickeln antwortete AH nach
+  // vielen Abrufen in Folge minutenlang mit 503 statt 403 — dieselbe
+  // Drosselung, nur ein anderer Code. Ohne diesen Zweig meldete die App
+  // „Albert Heijn antwortete mit HTTP 503" und gab sofort auf.
+  if (VORUEBERGEHEND.has(res.status) && versuch < 2) {
     await new Promise((r) => setTimeout(r, 2500 * (versuch + 1)));
     return getHtml(path, versuch + 1);
   }
 
   if (!res.ok) {
     throw new AllerhandeError(
-      res.status === 403
-        ? 'Albert Heijn hat die Anfrage abgelehnt (HTTP 403). Warte einen Moment und versuch es erneut.'
+      VORUEBERGEHEND.has(res.status)
+        ? `Albert Heijn nimmt gerade keine Anfragen an (HTTP ${res.status}). ` +
+          'Das geht meist von selbst vorbei — warte ein paar Minuten und versuch es erneut.'
         : `Albert Heijn antwortete mit HTTP ${res.status}`,
       res.status,
     );
@@ -190,6 +212,13 @@ export interface ImportedRecipe {
   totalMinutes?: number;
   /** Für wen es geeignet ist, z. B. „VegetarianDiet". */
   diets: string[];
+  /**
+   * AHs eigene Einordnung, z. B. „hoofdgerecht" oder „borrelhapje".
+   *
+   * Der Wochenplaner braucht sie, um Snacks und Beilagen von Hauptgerichten
+   * zu trennen — ohne sie landeten Joghurtriegel im Abendessen.
+   */
+  category?: string;
 }
 
 /**
@@ -241,8 +270,10 @@ export async function importRecipe(idOrPath: string, newRecipeId: string): Promi
       servings: Number.isFinite(servings) && servings >= 1 ? Math.round(servings) : 4,
       ingredients,
       sourceUrl: typeof ld.url === 'string' ? ld.url : `${BASE}${path}`,
+      imageUrl: imageFromJsonLd(ld.image) ?? firstRecipeImage(html),
       // instructions bleibt bewusst leer — siehe Dateikopf.
     },
+    category: typeof ld.recipeCategory === 'string' ? ld.recipeCategory.toLowerCase() : undefined,
     nutrition: {
       kcal: parseDutchNutritionValue(n.calories),
       fat: parseDutchNutritionValue(n.fatContent),
@@ -263,24 +294,85 @@ export async function importRecipe(idOrPath: string, newRecipeId: string): Promi
  * Einkaufsliste.
  */
 const NL_STAPLES = new Set([
+  // Grundwürze
   'zout',
   'peper',
   'zwarte_peper',
+  'peper_en_zout',
   'suiker',
   'water',
+  'bloem',
+  'tarwebloem',
+  'bakpoeder',
+  'maizena',
+
+  // Öl und Essig
   'olie',
   'olijfolie',
   'zonnebloemolie',
   'milde_olijfolie',
+  'sesamolie',
   'azijn',
-  'bloem',
-  'tarwebloem',
-  'bakpoeder',
-  'peper_en_zout',
+  'balsamicoazijn',
+  'witte_wijnazijn',
+
+  // Angebrochene Gläser und Flaschen. **Der eigentliche Zugewinn dieser
+  // Liste.** Eine Messung zeigte 7,29 € für Honig, von dem ein Rezept einen
+  // Teelöffel braucht, und 3,29 € für Erdnussbutter — beides landete jede
+  // Woche neu auf der Liste. Ein Glas Honig hält ein halbes Jahr; es gehört
+  // in den Vorrat, nicht in den Wocheneinkauf.
+  'honing',
+  'vloeibare_honing',
+  'pindakaas',
+  'mosterd',
+  'ketchup',
+  'mayonaise',
+  'sojasaus',
+  'ketjap',
+  'ketjap_manis',
+  'sambal',
+  'ahornsiroop',
+  'appelstroop',
+
+  // Trockene Gewürze. Ein Döschen reicht für zwanzig Gerichte.
+  'paprikapoeder',
+  'gerookte_paprikapoeder',
+  'komijnpoeder',
+  'komijnzaad',
+  'kerriepoeder',
+  'chilipoeder',
+  'chilivlokken',
+  'kaneel',
+  'nootmuskaat',
+  'kurkuma',
+  'gemberpoeder',
+  'knoflookpoeder',
+  'uienpoeder',
+  'laurierblad',
+  'italiaanse_kruiden',
+  'provencaalse_kruiden',
+
+  // Brühe
+  'bouillon',
+  'bouillontablet',
+  'groentebouillon',
+  'kippenbouillon',
+  'runderbouillon',
 ]);
 
-function isDutchStaple(name: string): boolean {
+/**
+ * Frische Ware, die zufällig wie Vorratsware heißt.
+ *
+ * „Gedroogde oregano" ist ein Döschen, „verse oregano" ein Töpfchen für
+ * 1,99 €, das nach vier Tagen welk ist. Wer das eine wie das andere
+ * behandelt, streicht dem Nutzer eine Zutat von der Liste, die er wirklich
+ * kaufen muss.
+ */
+const NL_FRISCH = /^(verse?|vers_)/;
+
+export function isDutchStaple(name: string): boolean {
   const key = normalizeKey(name);
+  if (NL_FRISCH.test(key)) return false;
   if (NL_STAPLES.has(key)) return true;
   // „extra vergine olijfolie" endet auf „olijfolie".
   return [...NL_STAPLES].some((s) => s.length >= 4 && key.endsWith(s));
@@ -355,8 +447,76 @@ function collectHits(html: string, limit: number): RecipeHit[] {
     const [, path, id, slug] = m;
     if (gesehen.has(id)) continue;
     gesehen.add(id);
-    treffer.push({ id, path, title: titleFromSlug(slug) });
+    treffer.push({
+      id,
+      path,
+      title: titleFromSlug(slug),
+      imageUrl: imageNearLink(html, (m.index ?? 0) + m[0].length),
+    });
     if (treffer.length >= limit) break;
   }
   return treffer;
+}
+
+/**
+ * Sucht das Vorschaubild, das zu einem Rezeptlink gehört.
+ *
+ * **Bewusst nur vorwärts bis zum schließenden `</a>`.** Die Karte ist ein
+ * Link, der das Bild umschließt; alles innerhalb dieses Bereichs gehört
+ * sicher zu diesem Rezept. Ein größeres Fenster würde mehr Bilder finden und
+ * manche davon dem falschen Gericht zuordnen — und ein falsches Bild ist
+ * schlimmer als gar keins, weil man ihm ansieht, dass es nicht passt, aber
+ * nicht, welches Rezept dahintersteckt.
+ */
+function imageNearLink(html: string, von: number): string | undefined {
+  const ende = html.indexOf('</a>', von);
+  const abschnitt = html.slice(von, ende === -1 ? von + 1200 : ende);
+  return firstRecipeImage(abschnitt);
+}
+
+/**
+ * Zieht die erste Rezeptbild-URL aus einem HTML-Schnipsel.
+ *
+ * Deckt drei Schreibweisen ab, weil AH sie gemischt verwendet: die nackte
+ * URL (`src`, `data-src`, `srcset`) und die Next.js-Bildoptimierung, die die
+ * echte URL prozentkodiert in einen `url=`-Parameter packt.
+ */
+export function firstRecipeImage(html: string): string | undefined {
+  const direkt = /https:\/\/static\.ah\.nl\/static\/recepten\/[^"'\s\\)]+/.exec(html);
+  if (direkt) return saeubern(direkt[0]);
+
+  const via = /url=(https%3A%2F%2Fstatic\.ah\.nl%2F[^&"'\s]+)/.exec(html);
+  if (via) {
+    try {
+      return saeubern(decodeURIComponent(via[1]));
+    } catch {
+      /* kaputte Kodierung — dann eben kein Bild */
+    }
+  }
+  return undefined;
+}
+
+/** Entfernt, was hinter der Dateiendung noch am Treffer klebt. */
+function saeubern(url: string): string {
+  return url.replace(/&amp;.*$/, '').replace(/[.,;]+$/, '');
+}
+
+/**
+ * Liest das Bild aus dem JSON-LD eines Rezepts.
+ *
+ * `image` ist bei AH meist ein Array, dessen **erster Eintrag ein leerer
+ * String** ist — deshalb wird nicht `[0]` genommen, sondern der erste
+ * Eintrag mit Inhalt. schema.org erlaubt außerdem ein `ImageObject` statt
+ * einer URL; auch das kommt vor.
+ */
+export function imageFromJsonLd(value: unknown): string | undefined {
+  const kandidaten = Array.isArray(value) ? value : [value];
+  for (const k of kandidaten) {
+    if (typeof k === 'string' && k.trim()) return k.trim();
+    if (k && typeof k === 'object') {
+      const url = (k as { url?: unknown }).url;
+      if (typeof url === 'string' && url.trim()) return url.trim();
+    }
+  }
+  return undefined;
 }

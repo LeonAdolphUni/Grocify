@@ -318,44 +318,92 @@ Deutsch und Niederländisch sind nah verwandt, also wird „-suppe" zu „-soep"
 und der Stamm getrennt nachgeschlagen. Das greift auch bei Wörtern, die
 niemand eingetragen hat.
 
-## Der Wochenplaner fragt nach
+## Der Wochenplaner
 
 Der Planer durchsucht **Allerhande**, nicht das eigene Rezeptbuch. Nur im
 eigenen Buch zu suchen wäre ein Kreis: Man kann planen, was man schon hat,
 und wer acht Rezepte besitzt, bekommt achtmal dieselbe Woche.
 
-Der Ablauf ist ein Gespräch, keine Maske. Man sagt, worauf man Lust hat,
-bekommt Vorschläge, verwirft was nicht passt und bekommt Ersatz. Jeder
-Vorschlag trägt seine Begründung — eine Liste ohne Begründung müsste man
-glauben, diese kann man prüfen:
+Der Ablauf ist ein **Formular**: Wünsche, Anzahl Gerichte, Budget je Portion,
+Zubereitungszeit, vegetarisch ja/nein. Jeder Vorschlag trägt seine Begründung
+— eine Liste ohne Begründung müsste man glauben, diese kann man prüfen.
 
-```
-Pastasalade met gegrilde kip     550 kcal   8 Zutaten   ausgewogen · deckt „kip" ab · 30 Min
-Broccolisoep met volkorenbrood   130 kcal   6 Zutaten   nur 6 Zutaten · teilt 1 Zutat · deckt „soep" ab
-Paprika-tomatensoep              170 kcal   6 Zutaten   nur 6 Zutaten · teilt 2 Zutaten
-```
+**Vorher war es ein Chat, und das war die schlechtere Idee.** Ein Gespräch
+stellt immer nur eine Frage auf einmal; Budget, Tage und Zeit kamen dabei nie
+zur Sprache. Der erste echte Durchlauf lieferte deshalb eine Woche, die zu
+teuer war, ohne dass sich sagen ließ, woran es lag. Ein Formular zeigt alle
+Stellschrauben nebeneinander.
 
-**Gesund und günstig sind die Auswahlregel, nicht Beiwerk.** Gesund kommt aus
-AHs eigenen Nährwertangaben je Portion — keine Schätzung. Günstig ergibt sich
-aus wenigen Zutaten und Überschneidung: Wer siebenmal dieselbe Packung
-anbricht, zahlt sie einmal.
+### Was beim ersten Testlauf schiefging
 
-Der echte Preis kommt nicht in den Vorschlag: Jedes Rezept bräuchte zehn
-Produktsuchen, für zwanzig Kandidaten wären das zweihundert Anfragen. Die
-Zutatenzahl ist ein grober, aber ehrlicher Stellvertreter — der Preis steht
-wenige Klicks später in der Einkaufsliste.
+Gemessen an einem echten Vorschlag — 41,36 € für vier Gerichte bei **7 %
+Verwertung**. Drei Ursachen, keine davon die vermutete:
+
+| Befund | Ursache | Behebung |
+|---|---|---|
+| Yoghurtbars als Abendessen | „Gesunde Rezepte" enthält Snacks und Riegel | Filter auf AHs `recipeCategory`, Sperrliste für Snacks und Nachtische |
+| Rezepte für 8–12 Portionen | Auf eine Person gerechnet bleibt ein Zwölftel Glas Honig | Höchstens **6 Portionen** |
+| 7,29 € Honig, 3,29 € Erdnussbutter | `isPantryStaple` kannte nur deutsche Namen | Niederländische Vorratsware, inkl. Gläser und Trockengewürze |
+
+Dazu ein vierter Punkt, der erst beim Nachmessen auffiel: Der Preis war **gar
+kein Kriterium**. Die Zutatenzahl stand als Stellvertreter dafür, mit der
+Begründung, echte Preise kosteten zu viele Anfragen. Das war falsch — die
+Rezeptseiten liegen auf `www.ah.nl` und sind gedrosselt, die Produktsuche
+läuft über `api.ah.nl` und ist es nicht.
+
+### Der Preis je Portion, richtig gerechnet
+
+Die naive Rechnung war ebenfalls falsch, und zwar spektakulär: Sie ergab
+**42,98 € je Portion** für ein Hähnchengericht. Wer ein Vier-Personen-Rezept
+auf eine Person kocht, kauft trotzdem die ganze Packung Hähnchen und das ganze
+Glas Senf — und der volle Einkauf wurde der einen Portion angelastet. Bei
+dieser Rechnung war jedes Gericht zu teuer, und ein Budgetfilter leerte die
+Woche vollständig.
+
+Die drei übrigen Portionen sind aber nicht weg, sie liegen im Kühlschrank.
+Gerechnet wird deshalb **Einkauf minus Restwert**, geteilt durch die
+Portionen. Damit der Rest nicht zur Ausrede wird, steht die **Verwertung als
+eigene Regel** daneben: Ein Gericht, dessen Rest niemand mehr isst, soll nicht
+dadurch gut dastehen, dass man den Rest herausrechnet.
+
+Ein Budget, unter dem nichts zu finden ist, wird **gelockert statt
+durchgesetzt** — mit sichtbarem Hinweis. Eine leere Woche sagt nur „nein",
+ein zu teurer Vorschlag sagt, was es kosten würde.
 
 ### Anfragen sind gedrosselt
 
 Beim Entwickeln haben schnell aufeinanderfolgende Aufrufe ein **HTTP 403**
 ausgelöst. AH schützt sich gegen Lastspitzen, zu Recht: Ein Import, der zehn
 Seiten in einer Sekunde zieht, verhält sich wie ein Scraper. Zwischen zwei
-Anfragen liegt deshalb mindestens **eine Sekunde**, und bei 403 oder 429 wird
-einmal gewartet und erneut versucht — nicht in einer Schleife, das wäre genau
-das Verhalten, gegen das sich die Sperre richtet.
+Anfragen liegt deshalb mindestens **eine Sekunde**, und bei 403, 429 oder 503
+wird einmal gewartet und erneut versucht — nicht in einer Schleife, das wäre
+genau das Verhalten, gegen das sich die Sperre richtet.
+
+**503 kam durch Messen dazu.** Nach ausgiebigem Sondieren antwortete AH
+minutenlang mit 503 statt 403 — dieselbe Drosselung, anderer Code. Die
+Preisabfragen laufen aus demselben Grund höchstens **drei gleichzeitig**: Ein
+Schwall von hundert parallelen Verbindungen hat Nodes HTTP-Schicht zum
+Absturz gebracht.
 
 Ein Wochenplan-Vorschlag holt neun bis zwanzig Rezeptseiten und dauert
 entsprechend **zehn bis zwanzig Sekunden**. Das steht auch in der App.
+
+## Bilder von Albert Heijn
+
+Rezepte zeigen das Foto von AHs Bildserver — in der Trefferliste, im
+Wochenplan und auf der Rezeptseite. Geladen wird **direkt von dort**, nichts
+wird kopiert: Zieht AH ein Rezept zurück, verschwindet auch sein Bild.
+
+Die Adresse steht an zwei Stellen, und beide werden gelesen. Im JSON-LD des
+Rezepts unter `image` — dort ist der **erste Eintrag ein leerer String**, wer
+`[0]` nimmt, zeigt nie ein Bild. Und in der Trefferliste, wo AH sie mal nackt
+ausliefert und mal prozentkodiert in einem `url=`-Parameter der
+Next.js-Bildoptimierung.
+
+Beim Zuordnen in der Trefferliste wird nur **vorwärts bis zum schließenden
+`</a>`** gesucht. Ein größeres Fenster fände mehr Bilder und ordnete manche
+dem falschen Gericht zu — und ein falsches Bild ist schlimmer als gar keins.
+Fehlt eins, steht das Monogramm da, wie bisher.
 
 ## Portionen: für eine Person gerechnet
 
@@ -444,6 +492,8 @@ Tomaten, Kürbisbrötchen statt Kürbis, `AH Tomaten passata gezeefd` statt
 | `api.test.ts` | 25 | Eingabeprüfung: was das Backend ablehnen muss |
 | `parseDutch.test.ts` | 34 | niederländische Einheiten, Verpackungsangaben |
 | `backup.test.ts` | 21 | der ganze Kreis: Datenbank → JSON → **andere** Datenbank |
+| `weekAdvisor.test.ts` | 25 | die Filter aus dem Testlauf — und dass „ham" nicht in „champignons" trifft |
+| `allerhande.test.ts` | 14 | Bildadressen in drei Schreibweisen, niederländische Vorratsware |
 
 Kein Test braucht Netzwerk. `db` und `api` bekommen je eine Wegwerf-Datenbank
 im temporären Ordner, `api` einen freien Port über `listen(0)`, und `allerhande`

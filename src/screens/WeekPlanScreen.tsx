@@ -23,7 +23,7 @@ import {
 } from '../domain/weekPlan';
 import { Button, Card, Header, Screen } from '../ui/components';
 import { PlateIcon } from '../ui/icons';
-import { Monogram } from '../ui/Monogram';
+import { RecipeThumb } from '../ui/RecipeThumb';
 import { colors, radius, spacing } from '../ui/theme';
 
 interface Props {
@@ -138,7 +138,7 @@ export function WeekPlanScreen({
                   const recipe = byId.get(id);
                   return (
                     <View key={`${day}-${id}`} style={s.meal}>
-                      <Monogram title={recipe?.title ?? '?'} size={32} />
+                      <RecipeThumb title={recipe?.title ?? '?'} imageUrl={recipe?.imageUrl} size={38} radius={8} />
                       <View style={s.mealBody}>
                         <Text style={s.mealTitle}>{recipe?.title ?? 'Unbekanntes Rezept'}</Text>
                         {recipe ? (

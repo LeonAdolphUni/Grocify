@@ -41,7 +41,7 @@ import {
 } from '../domain/searchLanguage';
 import { Header, Notice, Screen } from '../ui/components';
 import { DownloadIcon } from '../ui/icons';
-import { Monogram } from '../ui/Monogram';
+import { RecipeThumb } from '../ui/RecipeThumb';
 import { colors, fonts, radius, spacing } from '../ui/theme';
 
 interface Props {
@@ -281,7 +281,7 @@ export function ImportScreen({ language, onChangeLanguage, onImported, onBack }:
                 disabled={Boolean(state) || busy}
                 style={({ pressed }) => [s.row, pressed && s.rowPressed, state && s.rowDone]}
               >
-                <Monogram title={item.title} size={44} />
+                <RecipeThumb title={item.title} imageUrl={item.imageUrl} size={44} radius={8} />
                 <View style={s.body}>
                   <Text style={s.title} numberOfLines={2}>
                     {item.title}

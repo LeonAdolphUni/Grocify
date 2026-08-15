@@ -27,6 +27,7 @@ import {
 } from './allerhande';
 import { GrocifyDb, PLAN_ID } from './db';
 import { adviseWeek } from './weekAdvisor';
+import { AlbertHeijnProvider } from '../src/supermarkets/albertHeijn';
 
 interface Route {
   method: string;
@@ -152,8 +153,13 @@ const ROUTES: Route[] = [
         wishes?: unknown;
         days?: unknown;
         rejected?: unknown;
+        maxPricePerServing?: unknown;
+        vegetarianOnly?: unknown;
+        maxMinutes?: unknown;
       };
       const days = Number(b.days);
+      const budget = Number(b.maxPricePerServing);
+      const minuten = Number(b.maxMinutes);
 
       return adviseWeek({
         wishes: Array.isArray(b.wishes)
@@ -164,6 +170,14 @@ const ROUTES: Route[] = [
         rejected: Array.isArray(b.rejected)
           ? b.rejected.filter((r): r is string => typeof r === 'string')
           : [],
+        // Die Portionsgröße kommt aus den Einstellungen, nicht aus dem
+        // Formular: Sie gilt für die ganze App, und zwei Orte für dieselbe
+        // Zahl wären zwei Gelegenheiten, sie unterschiedlich zu setzen.
+        servings: db.getSettings().servingsPerMeal,
+        maxPricePerServing: Number.isFinite(budget) && budget > 0 ? budget : undefined,
+        vegetarianOnly: b.vegetarianOnly === true,
+        maxMinutes: Number.isFinite(minuten) && minuten > 0 ? minuten : undefined,
+        provider: new AlbertHeijnProvider(),
       });
     },
   },

@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS recipes (
   title       TEXT    NOT NULL,
   servings    INTEGER NOT NULL,
   source_url  TEXT,
+  image_url   TEXT,
   created_at  TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
 );
@@ -105,6 +106,25 @@ export class GrocifyDb {
     mkdirSync(dirname(file), { recursive: true });
     this.db = new DatabaseSync(file);
     this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  /**
+   * Holt bestehende Datenbanken auf den Stand des Schemas.
+   *
+   * `CREATE TABLE IF NOT EXISTS` legt eine fehlende Tabelle an, ergänzt aber
+   * keine fehlende **Spalte** — wer die App seit dem letzten Schemastand
+   * benutzt, hat eine `recipes`-Tabelle ohne `image_url`, und jede Abfrage
+   * darauf schlüge fehl. Deshalb hier: nachsehen, was da ist, und nur
+   * ergänzen, was fehlt. Daten werden dabei nie angefasst.
+   */
+  private migrate(): void {
+    const spalten = new Set(
+      (this.db.prepare('PRAGMA table_info(recipes)').all() as { name: string }[]).map((c) => c.name),
+    );
+    if (!spalten.has('image_url')) {
+      this.db.exec('ALTER TABLE recipes ADD COLUMN image_url TEXT');
+    }
   }
 
   close() {
@@ -115,8 +135,16 @@ export class GrocifyDb {
 
   listRecipes(): Recipe[] {
     const rows = this.db
-      .prepare('SELECT id, title, servings, source_url FROM recipes ORDER BY title COLLATE NOCASE')
-      .all() as { id: string; title: string; servings: number; source_url: string | null }[];
+      .prepare(
+        'SELECT id, title, servings, source_url, image_url FROM recipes ORDER BY title COLLATE NOCASE',
+      )
+      .all() as {
+      id: string;
+      title: string;
+      servings: number;
+      source_url: string | null;
+      image_url: string | null;
+    }[];
 
     const ingredientRows = this.db
       .prepare('SELECT * FROM ingredients ORDER BY recipe_id, position')
@@ -137,14 +165,23 @@ export class GrocifyDb {
       title: r.title,
       servings: r.servings,
       sourceUrl: r.source_url ?? undefined,
+      imageUrl: r.image_url ?? undefined,
       ingredients: byRecipe.get(r.id) ?? [],
     }));
   }
 
   getRecipe(id: string): Recipe | null {
     const row = this.db
-      .prepare('SELECT id, title, servings, source_url FROM recipes WHERE id = ?')
-      .get(id) as { id: string; title: string; servings: number; source_url: string | null } | undefined;
+      .prepare('SELECT id, title, servings, source_url, image_url FROM recipes WHERE id = ?')
+      .get(id) as
+      | {
+          id: string;
+          title: string;
+          servings: number;
+          source_url: string | null;
+          image_url: string | null;
+        }
+      | undefined;
     if (!row) return null;
 
     const ingredients = (
@@ -158,6 +195,7 @@ export class GrocifyDb {
       title: row.title,
       servings: row.servings,
       sourceUrl: row.source_url ?? undefined,
+      imageUrl: row.image_url ?? undefined,
       ingredients,
     };
   }
@@ -170,15 +208,24 @@ export class GrocifyDb {
     try {
       this.db
         .prepare(
-          `INSERT INTO recipes (id, title, servings, source_url, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)
+          `INSERT INTO recipes (id, title, servings, source_url, image_url, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              title = excluded.title,
              servings = excluded.servings,
              source_url = excluded.source_url,
+             image_url = excluded.image_url,
              updated_at = excluded.updated_at`,
         )
-        .run(recipe.id, recipe.title, recipe.servings, recipe.sourceUrl ?? null, now, now);
+        .run(
+          recipe.id,
+          recipe.title,
+          recipe.servings,
+          recipe.sourceUrl ?? null,
+          recipe.imageUrl ?? null,
+          now,
+          now,
+        );
 
       // Zutaten sind eine geschlossene Liste, kein Verlauf: löschen und neu
       // schreiben ist einfacher und korrekter als ein Abgleich Zeile für Zeile.

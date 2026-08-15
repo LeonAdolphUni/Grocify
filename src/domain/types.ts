@@ -75,6 +75,15 @@ export interface Recipe {
   ingredients: Ingredient[];
   sourceUrl?: string;
   /**
+   * Bild beim Anbieter, aus dem das Rezept stammt.
+   *
+   * Nur die Adresse, nicht das Bild: Es wird direkt von AHs Bildserver
+   * geladen. Wir kopieren fremde Fotos nicht auf unseren Rechner — die URL
+   * zeigt auf dieselbe Datei, die auch die Rezeptseite anzeigt, und
+   * verschwindet mit ihr, wenn AH sie zurückzieht.
+   */
+  imageUrl?: string;
+  /**
    * Zubereitungstext bewusst optional und niemals serverseitig gespeichert:
    * Zutatenlisten sind in der Regel nicht urheberrechtlich geschützt,
    * Zubereitungstexte schon.

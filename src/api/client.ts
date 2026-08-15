@@ -84,6 +84,10 @@ export interface AdvisorPick {
   ingredientCount: number;
   pantryShare: number;
   totalMinutes?: number;
+  /** Preis je Portion, wenn das Gericht allein gekauft würde. */
+  pricePerServing?: number;
+  /** Anteil des Gekauften, der bei diesem Gericht verkocht wird. */
+  utilization?: number;
 }
 
 export interface AdvisorResult {
@@ -92,6 +96,25 @@ export interface AdvisorResult {
   unmatched: string[];
   /** Wie viele Rezeptseiten geholt wurden. */
   fetched: number;
+  /** Was die Woche zusammen kostet — mit geteilten Packungen. */
+  totalPrice?: number;
+  /** Verwertung der ganzen Woche, 0…1. */
+  totalUtilization?: number;
+  /** Was aussortiert wurde und warum. */
+  filtered: { title: string; reason: string }[];
+  /** Das Budget ließ sich nicht halten — der Vorschlag liegt darüber. */
+  budgetRelaxed?: boolean;
+}
+
+/** Was der Nutzer im Planerformular eingestellt hat. */
+export interface AdvisorForm {
+  wishes: string[];
+  days: number;
+  /** Obergrenze je Portion in Euro. `undefined` heißt „egal". */
+  maxPricePerServing?: number;
+  vegetarianOnly?: boolean;
+  maxMinutes?: number;
+  rejected?: string[];
 }
 
 /** Eine Rezeptkategorie im Katalog. */
@@ -171,10 +194,10 @@ export const api = {
    * Dauert bewusst lange: Für jeden Kandidaten wird eine Rezeptseite geholt,
    * und die Anfragen sind gedrosselt, damit AH nicht mit 403 antwortet.
    */
-  adviseWeek: (wishes: string[], days: number, rejected: string[] = []) =>
+  adviseWeek: (form: AdvisorForm) =>
     request<AdvisorResult>('/advise-week', {
       method: 'POST',
-      body: JSON.stringify({ wishes, days, rejected }),
+      body: JSON.stringify(form),
     }),
 
   /** Die geprüften Rezeptkategorien für den Katalog. */
