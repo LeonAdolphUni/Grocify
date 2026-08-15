@@ -13,22 +13,33 @@ import { StatusBar } from 'expo-status-bar';
 
 import { ApiError, api } from './src/api/client';
 import type { Recipe } from './src/domain/types';
-import { emptyWeek, recipesInPlan, type WeekPlan, type Weekday } from './src/domain/weekPlan';
+import {
+  emptyWeek,
+  planFromRecipes,
+  recipesInPlan,
+  suggestWeek,
+  type WeekPlan,
+  type Weekday,
+} from './src/domain/weekPlan';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { ImportScreen } from './src/screens/ImportScreen';
+import { RecipeDetailScreen } from './src/screens/RecipeDetailScreen';
 import { RecipeEditScreen } from './src/screens/RecipeEditScreen';
 import { RecipeListScreen } from './src/screens/RecipeListScreen';
 import { ShoppingListScreen } from './src/screens/ShoppingListScreen';
 import { SupermarketScreen } from './src/screens/SupermarketScreen';
 import { WeekPlanScreen } from './src/screens/WeekPlanScreen';
 import { Kees } from './src/ui/Kees';
-import { colors, radius, spacing } from './src/ui/theme';
+import { Toast, type ToastMessage } from './src/ui/Toast';
+import { colors, loadWebFonts, radius, spacing } from './src/ui/theme';
+import { SEARCH_PROVIDER_ID } from './src/supermarkets/registry';
 
 type Route =
   | { name: 'home' }
   | { name: 'week' }
   | { name: 'recipes' }
   | { name: 'import' }
+  | { name: 'recipe'; recipeId: string }
   | { name: 'edit'; recipeId?: string }
   | { name: 'supermarket'; source: Recipe[] }
   | { name: 'list'; source: Recipe[]; providerId: string };
@@ -40,6 +51,10 @@ export default function App() {
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [loading, setLoading] = useState(true);
   const [fatal, setFatal] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  // Webfonts einmal beim Start nachladen — dieselben wie auf der Landingpage.
+  useEffect(() => loadWebFonts(), []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,10 +118,32 @@ export default function App() {
     [plan, updatePlan],
   );
 
-  const clearWeek = useCallback(
-    () => void updatePlan(emptyWeek(plan.id, plan.name)),
-    [plan.id, plan.name, updatePlan],
-  );
+  const clearWeek = useCallback(() => {
+    const vorher = plan;
+    void updatePlan(emptyWeek(plan.id, plan.name));
+    setToast({
+      text: 'Woche geleert',
+      action: { label: 'Rückgängig', run: () => updatePlan(vorher) },
+    });
+  }, [plan, updatePlan]);
+
+  /**
+   * Füllt eine leere Woche mit Gerichten, die sich Zutaten teilen.
+   *
+   * Ein Vorschlag, kein Urteil — deshalb steht direkt daneben, wie man ihn
+   * wieder loswird.
+   */
+  const suggestWeekPlan = useCallback(() => {
+    const vorher = plan;
+    const auswahl = suggestWeek(recipes);
+    if (auswahl.length === 0) return;
+
+    void updatePlan(planFromRecipes(plan.id, plan.name, auswahl));
+    setToast({
+      text: `${auswahl.length} Gerichte verteilt — verschieb, was nicht passt`,
+      action: { label: 'Rückgängig', run: () => updatePlan(vorher) },
+    });
+  }, [plan, recipes, updatePlan]);
 
   const handleSave = useCallback(
     async (recipe: Recipe) => {
@@ -114,6 +151,9 @@ export default function App() {
         await api.saveRecipe(recipe);
         setRecipes(await api.listRecipes());
         setRoute({ name: 'recipes' });
+        // Ohne Rückmeldung wirkt Speichern wie ein Sprung: Der Bildschirm
+        // wechselt, aber niemand sagt, dass es geklappt hat.
+        setToast({ text: `„${recipe.title}" gespeichert` });
       } catch (err) {
         setFatal(err instanceof ApiError ? err.message : (err as Error).message);
       }
@@ -135,19 +175,48 @@ export default function App() {
     }
   }, []);
 
-  const handleDelete = useCallback(async (id: string) => {
-    try {
-      await api.deleteRecipe(id);
-      // Der Wochenplan kann das Rezept enthalten haben — beide Stände neu
-      // holen statt zu raten, was das Backend daraus gemacht hat.
-      const [nextRecipes, nextPlan] = await Promise.all([api.listRecipes(), api.getWeekPlan()]);
-      setRecipes(nextRecipes);
-      setPlan(nextPlan);
-      setSelectedIds((ids) => ids.filter((x) => x !== id));
-    } catch (err) {
-      setFatal(err instanceof ApiError ? err.message : (err as Error).message);
-    }
-  }, []);
+  /**
+   * Löscht ein Rezept — und behält es für den Rückweg im Speicher.
+   *
+   * Löschen ist die einzige Aktion in der App, die Arbeit vernichtet. Eine
+   * Rückfrage („Wirklich löschen?") schützt schlecht: Man klickt sie weg.
+   * Ein Rückgängig-Streifen dagegen kostet keine Aufmerksamkeit, solange
+   * alles gutgeht, und rettet den Fehlgriff.
+   */
+  const handleDelete = useCallback(
+    async (id: string) => {
+      const geloescht = recipes.find((r) => r.id === id);
+      const planVorher = plan;
+      try {
+        await api.deleteRecipe(id);
+        // Der Wochenplan kann das Rezept enthalten haben — beide Stände neu
+        // holen statt zu raten, was das Backend daraus gemacht hat.
+        const [nextRecipes, nextPlan] = await Promise.all([api.listRecipes(), api.getWeekPlan()]);
+        setRecipes(nextRecipes);
+        setPlan(nextPlan);
+        setSelectedIds((ids) => ids.filter((x) => x !== id));
+
+        if (geloescht) {
+          setToast({
+            text: `„${geloescht.title}" gelöscht`,
+            action: {
+              label: 'Rückgängig',
+              run: async () => {
+                await api.saveRecipe(geloescht);
+                setRecipes(await api.listRecipes());
+                // Der Plan hatte das Rezept womöglich an mehreren Tagen —
+                // der Stand von vorher stellt genau das wieder her.
+                setPlan(await api.saveWeekPlan(planVorher));
+              },
+            },
+          });
+        }
+      } catch (err) {
+        setFatal(err instanceof ApiError ? err.message : (err as Error).message);
+      }
+    },
+    [recipes, plan],
+  );
 
   const planRecipes = useMemo(() => recipesInPlan(plan, recipes), [plan, recipes]);
   const selectedRecipes = useMemo(
@@ -203,6 +272,7 @@ export default function App() {
           onAddRecipe={addToDay}
           onRemoveRecipe={removeFromDay}
           onClearWeek={clearWeek}
+          onSuggestWeek={suggestWeekPlan}
           onManageRecipes={() => setRoute({ name: 'recipes' })}
           onBuildList={() => setRoute({ name: 'supermarket', source: planRecipes })}
           onBack={() => setRoute({ name: 'home' })}
@@ -220,6 +290,7 @@ export default function App() {
           }
           onCreate={() => setRoute({ name: 'edit' })}
           onImport={() => setRoute({ name: 'import' })}
+          onOpen={(recipeId) => setRoute({ name: 'recipe', recipeId })}
           onEdit={(recipeId) => setRoute({ name: 'edit', recipeId })}
           onDelete={handleDelete}
           onContinue={() => setRoute({ name: 'supermarket', source: selectedRecipes })}
@@ -233,6 +304,20 @@ export default function App() {
           onBack={() => setRoute({ name: 'recipes' })}
         />
       )}
+
+      {route.name === 'recipe' &&
+        (() => {
+          const recipe = recipes.find((r) => r.id === route.recipeId);
+          if (!recipe) return null;
+          return (
+            <RecipeDetailScreen
+              recipe={recipe}
+              providerId={SEARCH_PROVIDER_ID}
+              onEdit={() => setRoute({ name: 'edit', recipeId: recipe.id })}
+              onBack={() => setRoute({ name: 'recipes' })}
+            />
+          );
+        })()}
 
       {route.name === 'edit' && (
         <RecipeEditScreen
@@ -258,6 +343,10 @@ export default function App() {
           onBack={() => setRoute({ name: 'home' })}
         />
       )}
+
+      {/* Liegt über allem, damit die Rückmeldung auf jedem Bildschirm sichtbar
+          ist — auch wenn der Bildschirm dabei gewechselt hat. */}
+      <Toast message={toast} onDismiss={() => setToast(null)} />
     </>
   );
 }

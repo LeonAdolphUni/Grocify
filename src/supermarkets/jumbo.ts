@@ -75,4 +75,10 @@ export class JumboProvider implements PriceProvider {
   async browseCategory(): Promise<SearchResult> {
     throw new ProviderError(REASON, this.id, 403);
   }
+
+  async getNutrition(): Promise<null> {
+    // Kein Wurf: Nährwerte sind Beiwerk. Ein Anbieter ohne sie soll die
+    // Nährwertanzeige leer lassen, nicht die ganze Liste zum Absturz bringen.
+    return null;
+  }
 }

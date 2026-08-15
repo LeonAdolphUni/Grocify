@@ -7,7 +7,7 @@
  */
 
 import type { PriceProvider } from '../supermarkets/types';
-import { isPantryStaple, normalizeKey, toDutchSearchTerm } from './translate';
+import { isPantryStaple, normalizeKey, refreshSearchTerm } from './translate';
 import type { Ingredient, Product, Recipe, ShoppingList, ShoppingListItem } from './types';
 import { calculateTotal, packagesNeeded } from './types';
 import { toBase, toBaseForIngredient, type BaseQuantity, type Unit } from './units';
@@ -290,7 +290,7 @@ export async function findProductFor(
   ingredient: Pick<Ingredient, 'id' | 'name' | 'quantity' | 'searchTermNl'>,
   provider: PriceProvider,
 ): Promise<Product | null> {
-  const searchTerm = ingredient.searchTermNl?.trim() || toDutchSearchTerm(ingredient.name);
+  const searchTerm = refreshSearchTerm(ingredient.name, ingredient.searchTermNl);
   const required = toBaseForIngredient(
     ingredient.quantity,
     ingredient.id || normalizeKey(ingredient.name),
@@ -335,7 +335,7 @@ export async function buildShoppingList(
   // Drei parallele Anfragen: schnell genug für ein Rezept, ohne die
   // Datenquelle mit einem Schwall gleichzeitiger Requests zu treffen.
   const items = await mapLimit(merged, 3, async (ing): Promise<ShoppingListItem> => {
-    const searchTerm = ing.searchTermNl?.trim() || toDutchSearchTerm(ing.name);
+    const searchTerm = refreshSearchTerm(ing.name, ing.searchTermNl);
     const required = toBaseForIngredient(ing.quantity, ing.id || normalizeKey(ing.name));
 
     let item: ShoppingListItem;

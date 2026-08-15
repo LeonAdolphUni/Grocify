@@ -185,12 +185,57 @@ export function toDutchSearchTerm(germanName: string): string {
   const key = normalizeKey(germanName);
   if (DE_TO_NL[key]) return DE_TO_NL[key];
 
-  // Zusammengesetzte Begriffe: letztes Wort ist im Deutschen meist das
-  // Grundwort ("Bio-Vollmilch" → "milch"). Ein günstiger Treffer, kein Muss.
+  // Getrennte Begriffe: letztes Wort ist im Deutschen meist das Grundwort
+  // ("Bio-Vollmilch" → "milch").
   const lastWord = key.split(/[_-]/).at(-1);
   if (lastWord && DE_TO_NL[lastWord]) return DE_TO_NL[lastWord];
 
+  // Zusammengeschriebene Komposita — der eigentliche Normalfall im
+  // Deutschen. „Hühnerbrühe" ist eine Brühe, „Kartoffelsalat" ein Salat:
+  // Das Grundwort steht hinten und klebt am Bestimmungswort.
+  //
+  // Der längste passende Eintrag gewinnt, damit „vollmilch" nicht an „milch"
+  // hängen bleibt, wenn es beides gäbe. Mindestens vier Zeichen, sonst
+  // trifft „ei" auf jedes Wort, das zufällig darauf endet — „Petersilei"
+  // wäre kein Ei.
+  const suffix = longestMatch(key, (k) => key.endsWith(k));
+  if (suffix) return DE_TO_NL[suffix];
+
+  // Andersherum: Chefkoch schreibt die Einheit gern in den Namen
+  // („Knoblauchzehe", „Selleriestange"). Dann steht die Zutat vorne.
+  const prefix = longestMatch(key, (k) => key.startsWith(k));
+  if (prefix) return DE_TO_NL[prefix];
+
   return germanName.trim();
+}
+
+/** Längster Wörterbuchschlüssel ab vier Zeichen, der die Bedingung erfüllt. */
+function longestMatch(key: string, passt: (k: string) => boolean): string | undefined {
+  let best: string | undefined;
+  for (const k of Object.keys(DE_TO_NL)) {
+    if (k.length < 4 || k.length >= key.length || !passt(k)) continue;
+    if (!best || k.length > best.length) best = k;
+  }
+  return best;
+}
+
+/**
+ * Frischt einen gespeicherten Suchbegriff auf, wenn er nie einer war.
+ *
+ * Importierte Rezepte speichern `searchTermNl` zum Zeitpunkt des Imports.
+ * Wächst das Wörterbuch später, erreicht die Korrektur diese Rezepte nicht —
+ * „Schmand" blieb „Schmand", obwohl es inzwischen „creme fraiche" ergäbe.
+ *
+ * Ist der gespeicherte Begriff mit dem deutschen Namen identisch, hat die
+ * Übersetzung damals **nicht** gegriffen. Nur dann wird neu nachgeschlagen;
+ * ein echter niederländischer Begriff bleibt unangetastet, und ein vom
+ * Nutzer von Hand gesetzter erst recht.
+ */
+export function refreshSearchTerm(germanName: string, stored: string | undefined): string {
+  const term = stored?.trim();
+  if (!term) return toDutchSearchTerm(germanName);
+  if (normalizeKey(term) === normalizeKey(germanName)) return toDutchSearchTerm(germanName);
+  return term;
 }
 
 export function isPantryStaple(germanName: string): boolean {

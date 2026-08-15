@@ -34,6 +34,29 @@ export interface Category {
   imageUrl?: string;
 }
 
+/**
+ * Nährwerte eines Produkts, immer **je 100 g bzw. 100 ml**.
+ *
+ * Alle Felder sind optional, weil Hersteller unterschiedlich vollständig
+ * melden. Ein fehlendes Feld heißt „nicht angegeben" und wird nie als 0
+ * behandelt — sonst rechnet man Nullen in Summen hinein und die Anzeige
+ * behauptet eine Genauigkeit, die es nicht gibt.
+ */
+export interface Nutrition {
+  /** Bezugsgröße der Werte: 100 g oder 100 ml. */
+  basis: 'g' | 'ml';
+  kcal?: number;
+  kilojoule?: number;
+  /** Gramm je 100 g/ml. */
+  fat?: number;
+  saturatedFat?: number;
+  carbs?: number;
+  sugar?: number;
+  fiber?: number;
+  protein?: number;
+  salt?: number;
+}
+
 export interface PriceProvider {
   /** Stabile Kennung, landet in `Product.provider`. */
   readonly id: string;
@@ -75,6 +98,16 @@ export interface PriceProvider {
 
   /** Produkte einer Abteilung durchblättern, ohne Suchbegriff. */
   browseCategory(categoryId: string, options?: SearchOptions): Promise<SearchResult>;
+
+  /**
+   * Nährwerte eines Produkts, je 100 g/ml.
+   *
+   * Gibt `null` zurück, wenn der Hersteller nichts gemeldet hat — das ist
+   * bei Frischware (loses Gemüse, Backtheke) der Normalfall und kein Fehler.
+   * Optional, damit ein Anbieter ohne Nährwertdaten das Interface trotzdem
+   * erfüllen kann.
+   */
+  getNutrition?(productId: string): Promise<Nutrition | null>;
 }
 
 /** Fehler einer Supermarkt-Anbindung, mit HTTP-Status wo vorhanden. */

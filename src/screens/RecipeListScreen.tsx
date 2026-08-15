@@ -10,6 +10,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Recipe } from '../domain/types';
 import { Button, Card, Header, Screen } from '../ui/components';
+import { Kees } from '../ui/Kees';
 import { colors, radius, spacing } from '../ui/theme';
 
 interface Props {
@@ -18,6 +19,7 @@ interface Props {
   onToggleSelect: (id: string) => void;
   onCreate: () => void;
   onImport: () => void;
+  onOpen: (id: string) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onContinue: () => void;
@@ -30,6 +32,7 @@ export function RecipeListScreen({
   onToggleSelect,
   onCreate,
   onImport,
+  onOpen,
   onEdit,
   onDelete,
   onContinue,
@@ -69,6 +72,10 @@ export function RecipeListScreen({
         contentContainerStyle={s.list}
         ListEmptyComponent={
           <View style={s.empty}>
+            {/* Kees saß bisher nur in der Einkaufsliste. Ein Maskottchen,
+                das nur an einer Stelle auftaucht, wirkt wie Dekoration —
+                eines, das einen begrüßt, wenn nichts da ist, gehört dazu. */}
+            <Kees size={72} mood="content" />
             <Text style={s.emptyTitle}>Leg dein erstes Rezept an</Text>
             <Text style={s.emptyText}>
               Tippe oben rechts auf „+ Neu". Zutaten schreibst du einfach hin —
@@ -95,7 +102,10 @@ export function RecipeListScreen({
                     {selected ? <Text style={s.checkMark}>✓</Text> : null}
                   </View>
 
-                  <View style={s.body}>
+                  {/* Titel öffnet die Ansicht, die Fläche daneben wählt aus.
+                      Zwei Absichten, zwei Trefferflächen — vorher gab es für
+                      „nur mal nachsehen, was drin ist" gar keinen Weg. */}
+                  <Pressable style={s.body} onPress={() => onOpen(item.id)} hitSlop={4}>
                     <View style={s.nameRow}>
                       <Text style={s.name}>{item.title}</Text>
                       {/* Woher es kommt, bleibt sichtbar — sonst weiß man in
@@ -108,7 +118,7 @@ export function RecipeListScreen({
                       {item.ingredients.length}{' '}
                       {item.ingredients.length === 1 ? 'Zutat' : 'Zutaten'}
                     </Text>
-                  </View>
+                  </Pressable>
 
                   <Pressable onPress={() => onEdit(item.id)} hitSlop={8} style={s.action}>
                     <Text style={s.actionText}>Bearbeiten</Text>
@@ -176,7 +186,7 @@ const s = StyleSheet.create({
   action: { paddingHorizontal: spacing.xs, paddingVertical: spacing.xs },
   actionText: { fontSize: 13, color: colors.textMuted },
   actionDanger: { color: colors.alarm },
-  empty: { alignItems: 'center', paddingTop: 72, paddingHorizontal: spacing.xxl },
+  empty: { alignItems: "center", paddingTop: 56, paddingHorizontal: spacing.xxl, gap: spacing.md },
   emptyTitle: { fontSize: 17, fontWeight: '600', color: colors.text, marginBottom: spacing.sm },
   emptyText: { fontSize: 14, color: colors.textFaint, textAlign: 'center', lineHeight: 21 },
   emptyAction: { marginTop: spacing.xxl, alignSelf: 'stretch', gap: spacing.sm },

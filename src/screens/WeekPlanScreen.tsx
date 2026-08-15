@@ -30,6 +30,7 @@ interface Props {
   onAddRecipe: (day: Weekday, recipeId: string) => void;
   onRemoveRecipe: (day: Weekday, recipeId: string) => void;
   onClearWeek: () => void;
+  onSuggestWeek: () => void;
   onManageRecipes: () => void;
   onBuildList: () => void;
   onBack: () => void;
@@ -41,6 +42,7 @@ export function WeekPlanScreen({
   onAddRecipe,
   onRemoveRecipe,
   onClearWeek,
+  onSuggestWeek,
   onManageRecipes,
   onBuildList,
   onBack,
@@ -90,9 +92,21 @@ export function WeekPlanScreen({
                   </Text>
                 </>
               ) : (
-                <Text style={s.introHint}>
-                  Tippe bei einem Tag auf „+ Gericht", um zu beginnen.
-                </Text>
+                <>
+                  {/* Ein leerer Bildschirm mit „tippe auf + Gericht" hilft
+                      niemandem, der acht Rezepte hat und nicht weiß, womit
+                      er anfangen soll. Der Vorschlag wählt Gerichte, die
+                      sich Zutaten teilen — genau das, wofür die App da ist. */}
+                  <Button
+                    label={`Woche aus deinen ${recipes.length} Rezepten vorschlagen`}
+                    onPress={onSuggestWeek}
+                  />
+                  <Text style={s.introHint}>
+                    Gewählt wird nach Überschneidung: Gerichte, die sich Zutaten
+                    teilen, damit eine Packung über mehrere Abende reicht.
+                    Umstellen kannst du danach alles.
+                  </Text>
+                </>
               )}
             </View>
           </Card>

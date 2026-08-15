@@ -35,7 +35,8 @@ import { Header, Notice, Screen } from '../ui/components';
 import { Kees, keesSays, moodForUtilization } from '../ui/Kees';
 import { Hop, SeedBurst, SinkIn } from '../ui/motion';
 import { Petals, Sunflower } from '../ui/Sunflower';
-import { categoryIcon, colors, euro, radius, spacing } from '../ui/theme';
+import { categoryIcon, colors, euro, fonts, radius, spacing } from '../ui/theme';
+import { useWakeLock } from '../ui/useWakeLock';
 import { ProductSearchScreen } from './ProductSearchScreen';
 
 interface Props {
@@ -49,7 +50,10 @@ interface Props {
 
 const itemKey = (i: ShoppingListItem) => `${i.ingredient.id}-${i.ingredient.quantity.unit}`;
 
-function groupByCategory(items: ShoppingListItem[]): [string, ShoppingListItem[]][] {
+function groupByCategory(
+  items: ShoppingListItem[],
+  checked: Set<string>,
+): [string, ShoppingListItem[]][] {
   const map = new Map<string, ShoppingListItem[]>();
   for (const item of items) {
     const key = item.product?.category ?? 'Ohne Zuordnung';
@@ -57,7 +61,22 @@ function groupByCategory(items: ShoppingListItem[]): [string, ShoppingListItem[]
     if (list) list.push(item);
     else map.set(key, [item]);
   }
-  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], 'nl'));
+
+  // Abgehaktes sinkt ans Ende seiner Abteilung. Im Laden interessiert nur,
+  // was noch fehlt — Erledigtes soll nicht mehr im Weg stehen, aber auch
+  // nicht verschwinden: Man will nachsehen können, was man schon hat.
+  for (const [, entries] of map) {
+    entries.sort((a, b) => Number(checked.has(itemKey(a))) - Number(checked.has(itemKey(b))));
+  }
+
+  // Leere Abteilungen gibt es nicht, aber vollständig erledigte wandern
+  // nach unten — dieselbe Logik eine Ebene höher.
+  return [...map.entries()].sort((a, b) => {
+    const offenA = a[1].some((i) => !checked.has(itemKey(i)));
+    const offenB = b[1].some((i) => !checked.has(itemKey(i)));
+    if (offenA !== offenB) return offenA ? -1 : 1;
+    return a[0].localeCompare(b[0], 'nl');
+  });
 }
 
 
@@ -69,6 +88,16 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
   const [statsOpen, setStatsOpen] = useState(false);
   /** Für welche Zeile gerade ein Ersatzprodukt gesucht wird. */
   const [swapping, setSwapping] = useState<ShoppingListItem | null>(null);
+
+  /**
+   * Einkaufsmodus: große Zeilen, kein Beiwerk, Bildschirm bleibt an.
+   *
+   * Verwertungsquote und Restwert sind beim *Planen* die interessantesten
+   * Zahlen der App — im Laden sind sie Ballast. Dort zählt: Was fehlt noch,
+   * wie viel davon, und wo steht es.
+   */
+  const [shopping, setShopping] = useState(false);
+  useWakeLock(shopping);
 
   const provider = getProvider(providerId);
 
@@ -180,17 +209,48 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
     );
   }
 
-  const groups = groupByCategory(list.items);
+  const groups = groupByCategory(list.items, checked);
   const doneCount = list.items.filter((i) => checked.has(itemKey(i))).length;
 
   return (
     <Screen>
       <Header
-        title="Einkaufsliste"
-        subtitle={provider?.displayName}
+        title={shopping ? 'Einkaufen' : 'Einkaufsliste'}
+        subtitle={
+          shopping
+            ? `noch ${list.items.length - doneCount} von ${list.items.length}`
+            : provider?.displayName
+        }
         onBack={onBack}
         tone="pond"
+        right={
+          <Pressable
+            onPress={() => setShopping((v) => !v)}
+            style={({ pressed }) => [s.modeBtn, shopping && s.modeBtnOn, pressed && s.modePressed]}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: shopping }}
+          >
+            <Text style={[s.modeText, shopping && s.modeTextOn]}>
+              {shopping ? '✓ Im Laden' : '🛒 Im Laden'}
+            </Text>
+          </Pressable>
+        }
         extra={
+          shopping ? (
+            /* Im Laden zählt eine Zahl: was noch fehlt. Der Balken sagt es
+               ohne Lesen, der Betrag daneben bleibt für die Kasse. */
+            <View style={s.shopBar}>
+              <View style={s.progressTrack}>
+                <View
+                  style={[
+                    s.progressFill,
+                    { width: `${list.items.length ? (doneCount / list.items.length) * 100 : 0}%` },
+                  ]}
+                />
+              </View>
+              <Text style={s.shopTotal}>{euro(list.total)}</Text>
+            </View>
+          ) : (
           /* Die Blüte öffnet sich mit dem Einkauf: ein Blatt je erledigter
              Position. Sie springt bei jedem Häkchen kurz hoch. */
           <Pressable onPress={() => setStatsOpen(true)} style={s.summary}>
@@ -214,6 +274,7 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
               <Text style={s.summaryHint}>Antippen für die Statistik ›</Text>
             </View>
           </Pressable>
+          )
         }
       />
 
@@ -239,24 +300,40 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
               const isChecked = checked.has(key);
               return (
                 <SinkIn key={key} active={isChecked}>
-                <View style={s.item}>
-                  <Pressable onPress={() => toggle(key)} style={s.checkArea} hitSlop={6}>
-                    <View style={[s.box, isChecked && s.boxOn]}>
-                      {isChecked ? <Text style={s.boxMark}>✓</Text> : null}
-                    </View>
-                  </Pressable>
+                {/* Die ganze Zeile hakt ab — im Laden trifft man mit einer
+                    Hand keine 24-Pixel-Checkbox. „Ändern" liegt bewusst
+                    darin als eigene Fläche, damit es trotzdem erreichbar
+                    bleibt; im Einkaufsmodus fällt es ganz weg. */}
+                <Pressable
+                  onPress={() => toggle(key)}
+                  style={({ pressed }) => [
+                    s.item,
+                    shopping && s.itemBig,
+                    isChecked && s.itemDone,
+                    pressed && s.itemPressed,
+                  ]}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: isChecked }}
+                  accessibilityLabel={`${entry.product?.title ?? entry.ingredient.name}, ${euro(entry.lineTotal)}`}
+                >
+                  <View style={[s.box, shopping && s.boxBig, isChecked && s.boxOn]}>
+                    {isChecked ? <Text style={[s.boxMark, shopping && s.boxMarkBig]}>✓</Text> : null}
+                  </View>
 
                   {entry.product?.imageUrl ? (
-                    <Image source={{ uri: entry.product.imageUrl }} style={s.thumb} />
+                    <Image source={{ uri: entry.product.imageUrl }} style={[s.thumb, shopping && s.thumbBig]} />
                   ) : (
-                    <View style={[s.thumb, s.thumbEmpty]} />
+                    <View style={[s.thumb, shopping && s.thumbBig, s.thumbEmpty]} />
                   )}
 
-                  <Pressable style={s.itemBody} onPress={() => toggle(key)}>
-                    <Text style={[s.itemTitle, isChecked && s.struck]} numberOfLines={2}>
+                  <View style={s.itemBody}>
+                    <Text
+                      style={[s.itemTitle, shopping && s.itemTitleBig, isChecked && s.struck]}
+                      numberOfLines={2}
+                    >
                       {entry.product?.title ?? entry.ingredient.name}
                     </Text>
-                    <Text style={s.itemMeta}>
+                    <Text style={[s.itemMeta, shopping && s.itemMetaBig]}>
                       {entry.packagesToBuy > 0
                         ? `${entry.packagesToBuy} × ${entry.product?.packageSize || '?'}`
                         : '—'}
@@ -264,7 +341,9 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
                       {formatQuantity(entry.requiredQuantity)} {entry.ingredient.name}
                     </Text>
 
-                    {entry.utilization !== undefined ? (
+                    {/* Verwertung und Notizen sind Planungsinformation.
+                        Im Laden nehmen sie nur Platz weg. */}
+                    {!shopping && entry.utilization !== undefined ? (
                       <View style={s.utilRow}>
                         <Petals value={entry.utilization} />
                         <Text style={s.utilText}>
@@ -276,21 +355,23 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
                       </View>
                     ) : null}
 
-                    {entry.note ? <Text style={s.itemNote}>{entry.note}</Text> : null}
-                  </Pressable>
+                    {!shopping && entry.note ? <Text style={s.itemNote}>{entry.note}</Text> : null}
+                  </View>
 
                   <View style={s.right}>
                     {entry.needsManualMatch ? (
                       <Text style={s.missing}>fehlt</Text>
                     ) : (
-                      <Text style={s.price}>{euro(entry.lineTotal)}</Text>
+                      <Text style={[s.price, shopping && s.priceBig]}>{euro(entry.lineTotal)}</Text>
                     )}
                     {entry.product?.isOnSale ? <Text style={s.bonus}>BONUS</Text> : null}
-                    <Pressable onPress={() => setSwapping(entry)} hitSlop={6}>
-                      <Text style={s.swap}>ändern</Text>
-                    </Pressable>
+                    {!shopping ? (
+                      <Pressable onPress={() => setSwapping(entry)} hitSlop={10} style={s.swapHit}>
+                        <Text style={s.swap}>ändern</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
-                </View>
+                </Pressable>
                 </SinkIn>
               );
             })}
@@ -467,6 +548,49 @@ const s = StyleSheet.create({
   },
   itemChecked: { opacity: 0.5 },
   checkArea: { padding: 2 },
+
+  // ── Einkaufsmodus ────────────────────────────────────────────────
+  // Alles wird größer, nichts wird anders. Der Nutzer soll dieselbe Liste
+  // wiedererkennen, nur mit einer Hand bedienbar.
+  itemBig: { paddingVertical: spacing.lg, gap: spacing.lg, minHeight: 76 },
+  itemDone: { opacity: 0.55 },
+  itemPressed: { backgroundColor: colors.successBg },
+  boxBig: { width: 34, height: 34, borderRadius: radius.md },
+  boxMarkBig: { fontSize: 19, lineHeight: 23 },
+  thumbBig: { width: 58, height: 58 },
+  itemTitleBig: { fontSize: 18 },
+  itemMetaBig: { fontSize: 14, marginTop: 4 },
+  priceBig: { fontSize: 18 },
+  swapHit: { minHeight: 32, justifyContent: 'center' },
+
+  modeBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: 'rgba(244,251,239,0.35)',
+  },
+  modeBtnOn: { backgroundColor: colors.sun, borderColor: colors.sun },
+  modePressed: { opacity: 0.75 },
+  modeText: { fontFamily: fonts.heading, fontSize: 13, fontWeight: '700', color: colors.onDark },
+  modeTextOn: { color: '#3a2a00' },
+
+  shopBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
+  progressTrack: {
+    flex: 1,
+    height: 12,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(244,251,239,0.22)',
+    overflow: 'hidden',
+  },
+  progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.sun },
+  shopTotal: {
+    fontFamily: fonts.heading,
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.onDark,
+  },
   box: {
     width: 22,
     height: 22,

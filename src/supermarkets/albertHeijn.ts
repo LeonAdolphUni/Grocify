@@ -20,6 +20,7 @@ import type { Quantity, Unit } from '../domain/units';
 import {
   ProviderError,
   type Category,
+  type Nutrition,
   type PriceProvider,
   type SearchOptions,
   type SearchResult,
@@ -60,6 +61,30 @@ export function pickImageUrl(images: AhImage[] | undefined, minWidth: number): s
   if (!images?.length) return undefined;
   const bySize = [...images].sort((a, b) => a.width - b.width);
   return (bySize.find((img) => img.width >= minWidth) ?? bySize[bySize.length - 1]).url;
+}
+
+/**
+ * Nährwerte, wie AH sie liefert: GS1-GDSN.
+ *
+ * Ein sperriges, aber standardisiertes Format — dieselben Codes benutzt
+ * jeder Händler, der GDSN-Daten weitergibt. Ein Wechsel der Datenquelle
+ * müsste diesen Teil also womöglich gar nicht anfassen.
+ */
+interface AhNutrientDetail {
+  nutrientTypeCode?: { value?: string; label?: string };
+  quantityContained?: { value?: number; measurementUnitCode?: { value?: string } }[];
+}
+
+interface AhNutrientHeader {
+  nutrientBasisQuantity?: { value?: number; measurementUnitCode?: { value?: string } };
+  nutrientDetail?: AhNutrientDetail[];
+}
+
+interface AhDetailResponse {
+  productCard?: AhProduct;
+  tradeItem?: {
+    nutritionalInformation?: { nutrientHeaders?: AhNutrientHeader[] };
+  };
 }
 
 /** Rohform eines Produkts, wie AH es liefert (nur die genutzten Felder). */
@@ -239,11 +264,87 @@ export class AlbertHeijnProvider implements PriceProvider {
   }
 
   async getProductById(id: string): Promise<Product | null> {
+    const data = await this.fetchDetail(id);
+    return data?.productCard ? this.toProduct(data.productCard) : null;
+  }
+
+  /**
+   * Nährwerte je 100 g/ml.
+   *
+   * AH liefert sie im GS1-GDSN-Format: eine Liste `nutrientHeaders`, je Kopf
+   * eine Bezugsgröße (fast immer 100 g) und darunter `nutrientDetail` mit
+   * standardisierten Codes — `ENER-` für Energie, `FAT` für Fett, `PRO-` für
+   * Eiweiß. Energie steht zweimal drin, einmal in Kilojoule und einmal in
+   * Kilokalorien; unterschieden wird an der **Einheit**, nicht am Code.
+   *
+   * Frischware ohne Herstellerangabe gibt `null` — bei losem Gemüse und der
+   * Backtheke ist das der Normalfall, kein Fehler.
+   */
+  async getNutrition(productId: string): Promise<Nutrition | null> {
+    const data = await this.fetchDetail(productId);
+
+    const headers = data?.tradeItem?.nutritionalInformation?.nutrientHeaders ?? [];
+    // Den Kopf mit Bezug auf 100 nehmen. Manche Produkte melden zusätzlich
+    // „je Portion" — eine andere Bezugsgröße, die die Summe verfälschen würde.
+    const header = headers.find((h) => h.nutrientBasisQuantity?.value === 100) ?? headers[0];
+    if (!header?.nutrientDetail?.length) return null;
+
+    const basisUnit = header.nutrientBasisQuantity?.measurementUnitCode?.value?.toLowerCase();
+    const nutrition: Nutrition = { basis: basisUnit === 'ml' ? 'ml' : 'g' };
+
+    for (const detail of header.nutrientDetail) {
+      const code = detail.nutrientTypeCode?.value;
+      const quantity = detail.quantityContained?.[0];
+      const value = quantity?.value;
+      if (!code || typeof value !== 'number') continue;
+      const unit = quantity?.measurementUnitCode?.value?.toLowerCase();
+
+      switch (code) {
+        case 'ENER-':
+          if (unit === 'kcal') nutrition.kcal = value;
+          else if (unit === 'kj') nutrition.kilojoule = value;
+          break;
+        case 'FAT':
+          nutrition.fat = value;
+          break;
+        case 'FASAT':
+          nutrition.saturatedFat = value;
+          break;
+        case 'CHOAVL':
+          nutrition.carbs = value;
+          break;
+        case 'SUGAR-':
+        case 'SUGAR':
+          nutrition.sugar = value;
+          break;
+        case 'FIBTG':
+          nutrition.fiber = value;
+          break;
+        case 'PRO-':
+          nutrition.protein = value;
+          break;
+        case 'SALTEQ':
+          nutrition.salt = value;
+          break;
+      }
+    }
+
+    // Kilokalorien fehlen, Kilojoule sind da: umrechnen statt nichts zeigen.
+    if (nutrition.kcal === undefined && nutrition.kilojoule !== undefined) {
+      nutrition.kcal = Math.round(nutrition.kilojoule / 4.184);
+    }
+
+    // Ein Kopf ohne einen einzigen verwertbaren Wert ist so gut wie keiner.
+    const hatWert = Object.entries(nutrition).some(([k, v]) => k !== 'basis' && v !== undefined);
+    return hatWert ? nutrition : null;
+  }
+
+  /** Detailabruf — von getProductById und getNutrition gemeinsam genutzt. */
+  private async fetchDetail(id: string): Promise<AhDetailResponse | null> {
     try {
-      const data = (await this.authedFetch(`/mobile-services/product/detail/v4/fir/${id}`)) as {
-        productCard?: AhProduct;
-      };
-      return data.productCard ? this.toProduct(data.productCard) : null;
+      return (await this.authedFetch(
+        `/mobile-services/product/detail/v4/fir/${id}`,
+      )) as AhDetailResponse;
     } catch (err) {
       // 404 heißt: ausgelistet. Das ist ein Normalfall — der Aufrufer fällt
       // dann auf die normale Suche zurück. Alles andere wird durchgereicht.

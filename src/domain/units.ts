@@ -97,13 +97,41 @@ export function toBase(q: Quantity): BaseQuantity | null {
  * Schlüssel sind kanonische Zutaten-IDs, nicht Anzeigenamen.
  */
 export const AMBIGUOUS_WEIGHTS: Record<string, Partial<Record<Unit, number>>> = {
-  knoblauch: { Zehe: 5 },
+  knoblauch: { Zehe: 5, Stueck: 5 },
+  knoblauchzehe: { Zehe: 5, Stueck: 5 },
   petersilie: { Bund: 30 },
   moehre: { Bund: 500, Stueck: 80 },
+  karotte: { Bund: 500, Stueck: 80 },
   salz: { Prise: 0.4, Msp: 0.5 },
   pfeffer: { Prise: 0.3, Msp: 0.4 },
   zwiebel: { Stueck: 110 },
   ei: { Stueck: 58 },
+  eier: { Stueck: 58 },
+
+  // Stückgewichte für die Nährwertrechnung. Ohne sie fällt jede Zutat
+  // heraus, die in Stück angegeben ist — und das sind in echten Rezepten
+  // die meisten Gemüsezeilen. Werte sind mittlere Handelsgrößen.
+  paprika: { Stueck: 150 },
+  tomate: { Stueck: 100 },
+  kartoffel: { Stueck: 120 },
+  gurke: { Stueck: 400 },
+  zucchini: { Stueck: 250 },
+  aubergine: { Stueck: 300 },
+  zitrone: { Stueck: 100 },
+  limette: { Stueck: 65 },
+  apfel: { Stueck: 150 },
+  banane: { Stueck: 120 },
+  lauch: { Stueck: 250 },
+  fenchel: { Stueck: 300 },
+  schalotte: { Stueck: 35 },
+  fruehlingszwiebel: { Bund: 100, Stueck: 20 },
+  basilikum: { Bund: 25 },
+  schnittlauch: { Bund: 25 },
+  dill: { Bund: 25 },
+  minze: { Bund: 25 },
+  koriander: { Bund: 25 },
+  thymian: { Bund: 20 },
+  rosmarin: { Bund: 20 },
 };
 
 /**
@@ -117,6 +145,30 @@ export function toBaseForIngredient(
 ): BaseQuantity | null {
   const direct = toBase(q);
   if (direct) return direct;
+
+  const grams = AMBIGUOUS_WEIGHTS[ingredientId]?.[q.unit];
+  if (grams === undefined) return null;
+
+  return { amount: q.amount * grams, dimension: 'mass' };
+}
+
+/**
+ * Wie `toBaseForIngredient`, rechnet aber **Stückmengen zusätzlich in Gramm** um.
+ *
+ * Der Unterschied ist wichtig genug für eine eigene Funktion:
+ *
+ * Für den **Einkauf** ist „2 Zwiebeln" eine Stückzahl und soll es bleiben —
+ * man kauft Zwiebeln in Stück oder im Netz, nicht in Gramm. `toBase` gibt
+ * deshalb `count` zurück, und die Packungsrechnung stimmt.
+ *
+ * Für die **Nährwerte** ist „2 Zwiebeln" dagegen wertlos: Nährwerte gibt es
+ * nur je 100 g. Hier wird die Stückzahl über die Gewichtstabelle in Masse
+ * übersetzt — und wenn kein Stückgewicht bekannt ist, gibt es `null` statt
+ * eines geratenen Werts.
+ */
+export function toMassForIngredient(q: Quantity, ingredientId: string): BaseQuantity | null {
+  const base = toBaseForIngredient(q, ingredientId);
+  if (base && base.dimension !== 'count') return base;
 
   const grams = AMBIGUOUS_WEIGHTS[ingredientId]?.[q.unit];
   if (grams === undefined) return null;

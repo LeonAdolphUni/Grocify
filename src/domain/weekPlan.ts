@@ -76,3 +76,71 @@ export function plannedDayCount(plan: WeekPlan): number {
 export function totalMeals(plan: WeekPlan): number {
   return WEEKDAYS.reduce((n, d) => n + plan.days[d].length, 0);
 }
+
+/**
+ * Schlägt eine Woche vor, in der sich Zutaten überschneiden.
+ *
+ * Der Zweck der App ist nicht, sieben beliebige Gerichte auf sieben Tage zu
+ * verteilen — das könnte auch ein Würfel. Der Zweck ist, dass eine Packung
+ * über mehrere Abende reicht. Deshalb wird **gierig nach Überschneidung**
+ * ausgewählt: Das erste Gericht ist das zutatenreichste (es gibt den meisten
+ * Anschluss), jedes weitere ist das, welches am meisten Zutaten mit dem
+ * bisher Geplanten teilt.
+ *
+ * Bewusst simpel gehalten. Es ist ein Vorschlag, kein Urteil: Der Nutzer
+ * schiebt danach um, was ihm nicht passt. Ein leerer Bildschirm mit dem
+ * Hinweis „tippe auf + Gericht" hilft niemandem, der acht Rezepte hat und
+ * nicht weiß, womit er anfangen soll.
+ */
+export function suggestWeek(recipes: Recipe[], days = 7): Recipe[] {
+  if (recipes.length === 0) return [];
+
+  const zutatenVon = (r: Recipe) =>
+    new Set(r.ingredients.filter((i) => !i.isPantryStaple).map((i) => i.id || i.name.toLowerCase()));
+
+  const offen = [...recipes];
+  const gewaehlt: Recipe[] = [];
+  const imKorb = new Set<string>();
+
+  // Start: das Rezept mit den meisten eigenen Zutaten. Es bietet die größte
+  // Angriffsfläche für Überschneidungen.
+  offen.sort((a, b) => zutatenVon(b).size - zutatenVon(a).size);
+  const erstes = offen.shift();
+  if (!erstes) return [];
+  gewaehlt.push(erstes);
+  for (const z of zutatenVon(erstes)) imKorb.add(z);
+
+  while (gewaehlt.length < days && offen.length > 0) {
+    let bestIndex = 0;
+    let bestScore = -1;
+
+    offen.forEach((r, i) => {
+      const zutaten = zutatenVon(r);
+      let treffer = 0;
+      for (const z of zutaten) if (imKorb.has(z)) treffer++;
+      // Anteil statt absoluter Zahl: Sonst gewinnt immer das Rezept mit der
+      // längsten Zutatenliste, egal wie wenig es wirklich teilt.
+      const score = zutaten.size > 0 ? treffer / zutaten.size : 0;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = i;
+      }
+    });
+
+    const naechstes = offen.splice(bestIndex, 1)[0];
+    gewaehlt.push(naechstes);
+    for (const z of zutatenVon(naechstes)) imKorb.add(z);
+  }
+
+  return gewaehlt;
+}
+
+/** Verteilt Rezepte der Reihe nach auf die Wochentage. */
+export function planFromRecipes(id: string, name: string, recipes: Recipe[]): WeekPlan {
+  const plan = emptyWeek(id, name);
+  recipes.forEach((r, i) => {
+    const day = WEEKDAYS[i % WEEKDAYS.length];
+    plan.days[day].push(r.id);
+  });
+  return plan;
+}

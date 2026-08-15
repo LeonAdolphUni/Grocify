@@ -6,7 +6,7 @@
 import type { ReactNode } from 'react';
 import { Platform, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 
-import { CONTENT_MAX_WIDTH, colors, radius, spacing } from './theme';
+import { CONTENT_MAX_WIDTH, colors, fonts, radius, spacing } from './theme';
 
 export function Screen({ children }: { children: ReactNode }) {
   return (
@@ -159,7 +159,13 @@ const s = StyleSheet.create({
   backText: { color: colors.textMuted, fontSize: 15 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headerText: { flex: 1 },
-  title: { fontSize: 27, fontWeight: '700', color: colors.primary, letterSpacing: -0.4 },
+  title: {
+    fontSize: 27,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: -0.4,
+    fontFamily: fonts.heading,
+  },
   subtitle: { fontSize: 14, color: colors.textMuted, marginTop: 2 },
 
   btn: {
@@ -174,7 +180,7 @@ const s = StyleSheet.create({
   btnDanger: { backgroundColor: colors.alarmBg },
   btnDisabled: { opacity: 0.4 },
   btnPressed: { opacity: 0.75 },
-  btnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  btnText: { color: '#fff', fontWeight: '700', fontSize: 15, fontFamily: fonts.heading },
   btnTextSecondary: { color: colors.text },
   btnTextDanger: { color: colors.alarm },
 
