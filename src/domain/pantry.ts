@@ -83,7 +83,7 @@ const UNREGELMAESSIG: Record<string, string> = {
  *
  * Der Grund für diese Funktion ist ein echter Fehler: Wer „2 Zwiebeln" in
  * den Vorrat tippt — der natürliche deutsche Plural —, dessen Eintrag lief
- * unter `zwiebeln`. Im Rezept steht aber `zwiebel`, weil Chefkoch die
+ * unter `zwiebeln`. Im Rezept steht aber `zwiebel`, weil der Import die
  * Einzahl liefert. Der Abgleich fand nichts, und der Vorrat wurde
  * kommentarlos ignoriert.
  *

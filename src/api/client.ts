@@ -73,16 +73,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-/** Ein Suchtreffer beim Import. */
+/** Ein Suchtreffer beim Import aus Allerhande. */
 export interface ImportHit {
   id: string;
   title: string;
-  subtitle?: string;
+  /** Pfad auf ah.nl — wird zum Nachladen gebraucht. */
+  path: string;
   imageUrl?: string;
-  rating?: number;
-  ratingCount?: number;
-  preparationTime?: number;
-  siteUrl?: string;
 }
 
 /** Ergebnis eines Imports. */
@@ -90,6 +87,15 @@ export interface ImportResult {
   recipe: Recipe;
   /** War schon da — es wurde nichts überschrieben und nichts doppelt angelegt. */
   alreadyInBook: boolean;
+  /** AHs eigene Nährwerte je Portion. */
+  nutrition?: {
+    kcal?: number;
+    fat?: number;
+    saturatedFat?: number;
+    carbs?: number;
+    protein?: number;
+  };
+  totalMinutes?: number;
 }
 
 export const api = {
@@ -131,11 +137,11 @@ export const api = {
   deletePantryItem: (id: string) =>
     request<{ deleted: string }>(`/pantry/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
-  /** Rezepte bei Chefkoch suchen. Läuft über das Backend, nicht im Browser. */
+  /** Rezepte bei Allerhande suchen. Läuft über das Backend, nicht im Browser. */
   searchImport: (query: string) =>
     request<ImportHit[]>(`/import/search?q=${encodeURIComponent(query)}`),
 
   /** Übernimmt ein gefundenes Rezept ins eigene Buch. */
-  importRecipe: (chefkochId: string) =>
-    request<ImportResult>(`/import/${encodeURIComponent(chefkochId)}`, { method: 'POST' }),
+  importRecipe: (recipeId: string) =>
+    request<ImportResult>(`/import/${encodeURIComponent(recipeId)}`, { method: 'POST' }),
 };

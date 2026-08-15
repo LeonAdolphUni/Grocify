@@ -20,8 +20,7 @@ Der komplette Ablauf funktioniert Ende zu Ende:
 Ladenabteilung.
 
 Rezepte legst du selbst an — Zutaten als Freitext, „Milch 0,5 l" reicht — oder
-holst sie dir **von Chefkoch** ins eigene Buch. Der Import aus Link und Foto
-über die Claude API folgt in Sprint 4–5.
+holst sie dir **aus Albert Heijns Allerhande** ins eigene Buch.
 
 Dazu gibt es eine **Landingpage** unter `landing/index.html` (statisch, ohne
 Build; die Spezifikation dazu liegt in [`DESIGN.md`](DESIGN.md)).
@@ -191,7 +190,7 @@ beschränkt.
 server/               Backend — eigener Prozess
   db.ts               SQLite-Schema und Datenzugriff
   api.ts              HTTP-Routen
-  chefkoch.ts         Rezept-Import
+  allerhande.ts       Rezept-Import aus Albert Heijns Allerhande
   index.ts            Einstiegspunkt
 src/
   domain/             Reine Logik — kein Netzwerk, keine UI, voll testbar
@@ -224,7 +223,7 @@ seit der Umstellung auf das Backend liegen sie in der Datenbankdatei.
 |---|---|---|
 | **Albert Heijn** | funktioniert | Anonymer Token ohne Account, Produktsuche, Preise, Aktionen, Abteilungen |
 | **Jumbo** | abgeschaltet | `mobileapi.jumbo.com` antwortet auf alles mit **404** (geprüft 14.08.2026) |
-| **Chefkoch** | funktioniert | Rezept-Import über das App-Backend, keine offizielle API |
+| **Allerhande** | funktioniert | Rezept-Import über das schema.org-JSON-LD der Rezeptseiten |
 
 Bei Jumbo ist die Veränderung aufschlussreich: Am 11.08. kam noch ein **403**,
 drei Tage später ein **404**. „Du darfst nicht" wurde zu „hier ist nichts mehr".
@@ -244,9 +243,49 @@ Partnerschaft oder einen kommerziellen Anbieter umgestellt werden. Genau
 dafür existiert das `PriceProvider`-Interface: Der Wechsel ist ein
 Klassentausch, kein Umbau der App.
 
+## Rezepte von Albert Heijn statt aus Deutschland
+
+Der Import holt Rezepte aus **Allerhande**, Albert Heijns eigenem
+Rezeptportal. Das ist keine Geschmacksfrage, sondern behebt die größte
+Fehlerquelle der App.
+
+Ein deutsches Rezept muss übersetzt werden, bevor man es im niederländischen
+Regal suchen kann: „Schmand" → `creme fraiche`, „Hühnerbrühe" → `bouillon`.
+Dafür brauchte es ein Wörterbuch mit hundert Einträgen, eine
+Kompositum-Zerlegung, einen Rückfall aufs Grundwort — und am Ende fanden
+trotzdem Zutaten nichts.
+
+**Allerhande-Zutaten sind schon die Produktnamen.** „300 g biologische
+volkorenpenne" ist kein Übersetzungsproblem, sondern ein Suchbegriff. Was
+importiert wird, gibt es im Laden.
+
+Gemessen an fünf echten Rezepten, 50 Zutaten:
+
+| Rezept | Positionen | zugeordnet |
+|---|---|---|
+| Romige green goddess-pasta | 11 | 91 % |
+| Tagliatelle met ricotta-tomatensaus | 12 | 83 % |
+| Maissoep met kipgehaktballetjes | 8 | 88 % |
+| Couscoussalade met yoghurtdressing | 9 | **100 %** |
+| Gevuld flatbread met vegan shoarma | 10 | 80 % |
+| **Gesamt** | **50** | **88 %** |
+
+Dazu liefert Allerhande **eigene Nährwerte je Portion** — keine Schätzung
+aus der Durchschnittstabelle mehr, sondern AHs Angabe.
+
+Gelesen wird das schema.org-`Recipe`-JSON-LD der Rezeptseiten. Das ist
+strukturierte Auszeichnung, die AH ausdrücklich für Maschinen
+veröffentlicht: Ihre `robots.txt` nennt eine eigene Sitemap für Rezepte und
+vermerkt „ALLERHANDE OPTIMALISATIE — Minder restrictief voor SEO". Gesperrt
+sind Nutzerbereiche und Mehrfachfilter (`/allerhande/*?*&*`), nicht die
+Rezepte — deshalb nutzt die Suche bewusst **genau einen** Abfrageparameter.
+
+Das deutsche Wörterbuch bleibt: Es gilt weiterhin für selbst angelegte
+Rezepte, die man auf Deutsch eintippt.
+
 ## Portionen: für eine Person gerechnet
 
-Grocify ist für **eine Person** gebaut, Rezepte sind es nie — Chefkoch
+Grocify ist für **eine Person** gebaut, Rezepte sind es nie — Allerhande
 liefert vier bis acht Portionen. Jedes Rezept wird deshalb beim *Benutzen*
 auf die eingestellte Portionszahl umgerechnet (Standard: 1). Das Original
 bleibt in der Datenbank unangetastet, samt Herkunftsangabe.
@@ -287,7 +326,7 @@ auf dem Startbildschirm, statt versteckt zu sein.
 | 1 | Domänenkern: Einheiten, Typen | ✅ — 193 Tests, siehe unten |
 | 2 | Screens: Rezepte, Supermarkt, Einkaufsliste | ✅ |
 | 3 | Rezept-Parsing (Freitext, ohne LLM) | ✅ — `parseIngredient.ts`, 24 Fälle |
-| 3b | Rezept-Import von Chefkoch | ✅ |
+| 3b | Rezept-Import von Albert Heijn Allerhande | ✅ |
 | 4 | Import per Link (schema.org/Recipe JSON-LD) | offen |
 | 5 | Import per Foto (Claude Vision) | offen |
 | 6 | Zutaten-Normalisierung per LLM statt Wörterbuch | offen |
@@ -329,11 +368,11 @@ Tomaten, Kürbisbrötchen statt Kürbis, `AH Tomaten passata gezeefd` statt
 | `stats.test.ts` | 18 | Verwertung nach Geld gewichtet, nicht nach Zeilen |
 | `db.test.ts` | 15 | `ON DELETE CASCADE` — gelöschtes Rezept verlässt den Wochenplan |
 | `api.test.ts` | 25 | Eingabeprüfung: was das Backend ablehnen muss |
-| `chefkoch.test.ts` | 17 | Pluralklammern, „nach Geschmack", Trennzeilen |
+| `parseDutch.test.ts` | 34 | niederländische Einheiten, Verpackungsangaben |
 | `backup.test.ts` | 21 | der ganze Kreis: Datenbank → JSON → **andere** Datenbank |
 
 Kein Test braucht Netzwerk. `db` und `api` bekommen je eine Wegwerf-Datenbank
-im temporären Ordner, `api` einen freien Port über `listen(0)`, und `chefkoch`
+im temporären Ordner, `api` einen freien Port über `listen(0)`, und `allerhande`
 eine `fetch`-Attrappe. Was echtes Netzwerk braucht, bleibt in den
 Messwerkzeugen unten.
 
@@ -378,4 +417,4 @@ lösche vorher `server/data/grocify.db`.
 | `npm run smoke:list` | Einkaufslisten-Logik gegen echte Preise |
 | `npm run check:dict` | jeden Wörterbucheintrag gegen den echten Katalog |
 | `npm run try:week` | Wochenplan: Ersparnis, Verwertung, Preis je Portion |
-| `npm run try:import` | Chefkoch-Import bis zum fertigen Preis |
+| `npm run try:allerhande` | Allerhande-Import bis zum fertigen Preis |

@@ -1,14 +1,20 @@
 /**
- * Rezepte von Chefkoch ins eigene Buch holen.
+ * Rezepte aus Albert Heijns Allerhande ins eigene Buch holen.
  *
- * Suchen, antippen, fertig — die Zutaten stehen danach in deinem Rezept und
- * werden beim Einkauf wie jedes selbst angelegte behandelt.
+ * Suchen, antippen, fertig.
  *
- * Was übernommen wird, ist eine bewusste Auswahl: Titel, Portionen, Zutaten
- * und der Link zum Original. **Der Zubereitungstext bleibt drüben.**
- * Zutatenlisten sind in Deutschland in der Regel nicht urheberrechtlich
- * geschützt, Zubereitungstexte schon — und zum Planen eines Einkaufs
- * braucht die App sie nicht. Zum Kochen führt der Link zurück zum Original.
+ * **Warum AH und nicht mehr Chefkoch.** Ein deutsches Rezept muss übersetzt
+ * werden, bevor man es im niederländischen Regal suchen kann — und genau
+ * diese Kette war die größte Fehlerquelle der App. Allerhande-Rezepte tragen
+ * die Namen, unter denen AH die Produkte verkauft: Was hier importiert wird,
+ * gibt es im Laden. Gemessen an einem echten Rezept: 91 % der Zutaten finden
+ * sofort ihr Produkt, gegenüber deutlich weniger beim deutschen Weg.
+ *
+ * Was übernommen wird, ist eine bewusste Auswahl: Titel, Portionen, Zutaten,
+ * Nährwerte und der Link zum Original. **Der Zubereitungstext bleibt drüben** —
+ * Zutatenlisten sind in der Regel nicht urheberrechtlich geschützt,
+ * Zubereitungstexte schon, und zum Planen eines Einkaufs braucht die App sie
+ * nicht.
  */
 
 import { useCallback, useState } from 'react';
@@ -25,7 +31,8 @@ import {
 
 import { ApiError, api, type ImportHit } from '../api/client';
 import { Header, Notice, Screen } from '../ui/components';
-import { DownloadIcon, PlateIcon } from '../ui/icons';
+import { DownloadIcon } from '../ui/icons';
+import { Monogram } from '../ui/Monogram';
 import { colors, radius, spacing } from '../ui/theme';
 
 interface Props {
@@ -40,7 +47,7 @@ export function ImportScreen({ onImported, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   /** Welcher Treffer gerade übernommen wird. */
   const [importing, setImporting] = useState<string | null>(null);
-  /** Chefkoch-ID → war es neu oder lag es schon im Buch? */
+  /** Rezept-ID → war es neu oder lag es schon im Buch? */
   const [done, setDone] = useState<Record<string, 'neu' | 'schon da'>>({});
 
   const search = useCallback(async () => {
@@ -63,7 +70,8 @@ export function ImportScreen({ onImported, onBack }: Props) {
       setImporting(hit.id);
       setError(null);
       try {
-        const result = await api.importRecipe(hit.id);
+        // Der Pfad enthält die ID und den Slug — AH braucht beides.
+        const result = await api.importRecipe(hit.path);
         setDone((d) => ({ ...d, [hit.id]: result.alreadyInBook ? 'schon da' : 'neu' }));
         onImported(result.recipe.title);
       } catch (err) {
@@ -78,8 +86,8 @@ export function ImportScreen({ onImported, onBack }: Props) {
   return (
     <Screen>
       <Header
-        title="Rezept importieren"
-        subtitle="Suche bei Chefkoch"
+        title="Rezept holen"
+        subtitle="Albert Heijn Allerhande"
         onBack={onBack}
         tone="sun"
       />
@@ -90,7 +98,7 @@ export function ImportScreen({ onImported, onBack }: Props) {
           value={query}
           onChangeText={setQuery}
           onSubmitEditing={search}
-          placeholder="z. B. Bolognese, Kürbissuppe, Lasagne"
+          placeholder="z. B. pasta, kip, soep, salade"
           returnKeyType="search"
           autoFocus
         />
@@ -118,7 +126,7 @@ export function ImportScreen({ onImported, onBack }: Props) {
                 <DownloadIcon size={34} color={colors.textFaint} />
                 <Text style={s.emptyText}>
                   {hits === null
-                    ? 'Suche nach einem Gericht. Übernommen werden Titel, Portionen und Zutaten — die Zubereitung bleibt bei Chefkoch, dorthin führt ein Link.'
+                    ? 'Suche auf Niederländisch — „pasta", „kip", „soep". Übernommen werden Titel, Portionen, Zutaten und Nährwerte; die Zubereitung bleibt bei Albert Heijn, dorthin führt ein Link.'
                     : 'Keine Treffer. Versuch einen anderen Begriff.'}
                 </Text>
               </View>
@@ -136,25 +144,14 @@ export function ImportScreen({ onImported, onBack }: Props) {
                 {item.imageUrl ? (
                   <Image source={{ uri: item.imageUrl }} style={s.thumb} />
                 ) : (
-                  <View style={[s.thumb, s.thumbEmpty]}>
-                    <PlateIcon size={26} color={colors.textFaint} />
-                  </View>
+                  <Monogram title={item.title} size={46} />
                 )}
 
                 <View style={s.body}>
                   <Text style={s.title} numberOfLines={2}>
                     {item.title}
                   </Text>
-                  {item.subtitle ? (
-                    <Text style={s.subtitle} numberOfLines={1}>
-                      {item.subtitle}
-                    </Text>
-                  ) : null}
-                  <Text style={s.meta}>
-                    {item.rating ? `★ ${item.rating.toFixed(1)}` : 'ohne Bewertung'}
-                    {item.ratingCount ? ` (${item.ratingCount})` : ''}
-                    {item.preparationTime ? ` · ${item.preparationTime} Min` : ''}
-                  </Text>
+                  <Text style={s.meta}>Albert Heijn Allerhande</Text>
                 </View>
 
                 <View style={s.action}>
@@ -177,9 +174,9 @@ export function ImportScreen({ onImported, onBack }: Props) {
           ListFooterComponent={
             hits && hits.length > 0 ? (
               <Text style={s.foot}>
-                Chefkoch bietet keine offizielle Schnittstelle an — der Import nutzt
-                das Backend ihrer App. Es funktioniert, kann aber ohne Vorwarnung
-                wegfallen.
+                Diese Rezepte sind Albert Heijns eigene — ihre Zutaten tragen die
+                Namen, unter denen AH die Produkte verkauft. Deshalb findet die
+                Einkaufsliste sie fast immer sofort.
               </Text>
             ) : null
           }

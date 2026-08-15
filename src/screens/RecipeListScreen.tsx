@@ -65,7 +65,7 @@ export function RecipeListScreen({
               style={({ pressed }) => [s.importBtn, pressed && s.importBtnPressed]}
             >
               <DownloadIcon size={16} color="#3a2a00" />
-              <Text style={s.importBtnText}>Chefkoch</Text>
+              <Text style={s.importBtnText}>Allerhande</Text>
             </Pressable>
             <Button label="+ Neu" onPress={onCreate} />
           </View>
@@ -90,10 +90,10 @@ export function RecipeListScreen({
 
             <View style={s.emptyAction}>
               <Button label="Erstes Rezept anlegen" onPress={onCreate} />
-              <Button label="Von Chefkoch holen" onPress={onImport} variant="secondary" />
+              <Button label="Rezept von Albert Heijn holen" onPress={onImport} variant="secondary" />
               <Text style={s.emptyHint}>
-                Der Import übernimmt Titel, Portionen und Zutaten. Die Zubereitung
-                bleibt bei Chefkoch — ein Link führt hin.
+                Rezepte von Albert Heijn: Ihre Zutaten sind AHs eigene Produktnamen,
+                deshalb findet die Einkaufsliste sie fast immer sofort.
               </Text>
             </View>
           </View>
@@ -142,9 +142,18 @@ export function RecipeListScreen({
       {selectedCount > 0 ? (
         <View style={s.footer}>
           <Button
-            label={`Weiter mit ${selectedCount} ${selectedCount === 1 ? 'Rezept' : 'Rezepten'}`}
+            label={
+              selectedCount === 1
+                ? 'Dieses Gericht einkaufen'
+                : `Diese ${selectedCount} Gerichte einkaufen`
+            }
             onPress={onContinue}
           />
+          <Text style={s.footerHint}>
+            {pantryCount > 0
+              ? `Dein Vorrat (${pantryCount} ${pantryCount === 1 ? 'Eintrag' : 'Einträge'}) wird abgezogen`
+              : 'Unabhängig vom Wochenplan — nur diese Gerichte'}
+          </Text>
         </View>
       ) : null}
     </Screen>

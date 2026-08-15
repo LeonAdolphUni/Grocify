@@ -59,7 +59,7 @@ export function PlannerScreen({ recipes, pantry, onApply, onManageRecipes, onBac
           <Text style={s.emptyTitle}>Noch keine Rezepte</Text>
           <Text style={s.emptyText}>
             Der Helfer wählt aus deinen eigenen Rezepten. Leg erst ein paar an
-            oder hol dir welche von Chefkoch.
+            oder hol dir welche von Albert Heijn.
           </Text>
           <Button label="Zu den Rezepten" onPress={onManageRecipes} />
         </View>
@@ -135,7 +135,7 @@ export function PlannerScreen({ recipes, pantry, onApply, onManageRecipes, onBac
             {result.unmatchedWishes.length > 0 ? (
               <Notice tone="warn">
                 Kein Rezept gefunden für: {result.unmatchedWishes.join(', ')}. Lege
-                eines an oder hol dir eines von Chefkoch.
+                eines an oder hol dir eines von Albert Heijn.
               </Notice>
             ) : null}
 

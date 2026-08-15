@@ -296,7 +296,7 @@ export default function App() {
    *
    * Wirkt sofort auf alles, was daraus entsteht — Einkaufsliste, Nährwerte,
    * Portionsanzeige. Die Rezepte selbst bleiben unangetastet: In der
-   * Datenbank steht weiter „6 Portionen laut Chefkoch".
+   * Datenbank steht weiter „4 Portionen laut Allerhande".
    */
   const changeServings = useCallback(async (servingsPerMeal: number) => {
     const vorher = settings;
@@ -474,7 +474,7 @@ export default function App() {
         <RecipeEditScreen
           // Bewusst das **Original**, nicht die umgerechnete Fassung: Wer ein
           // Rezept bearbeitet und speichert, würde sonst die Umrechnung
-          // festschreiben — aus „6 Portionen laut Chefkoch" würde dauerhaft
+          // festschreiben — aus „4 Portionen laut Allerhande" würde dauerhaft
           // „1 Portion", und die Herkunftsangabe wäre weg.
           recipe={recipes.find((r) => r.id === route.recipeId)}
           onSave={handleSave}

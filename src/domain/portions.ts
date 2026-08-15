@@ -1,7 +1,7 @@
 /**
  * Portionen umrechnen.
  *
- * Grocify ist für **eine Person** gebaut. Rezepte sind es fast nie: Chefkoch
+ * Grocify ist für **eine Person** gebaut. Rezepte sind es fast nie: Allerhande
  * liefert vier, sechs oder acht Portionen, weil Rezepte für Familien
  * geschrieben werden. Ohne Umrechnung kauft die App jede Woche den vierfachen
  * Bedarf ein.
@@ -26,7 +26,7 @@ export const DEFAULT_SERVINGS = 1;
  *
  * Das Original bleibt unangetastet — die Umrechnung passiert beim *Benutzen*
  * des Rezepts, nicht beim Speichern. Ein importiertes Rezept behält damit
- * seine Herkunftsangabe („6 Portionen laut Chefkoch"), und wer die
+ * seine Herkunftsangabe („4 Portionen laut Allerhande"), und wer die
  * Zielportionen später ändert, verliert nichts.
  *
  * Mehrdeutige Einheiten werden mitskaliert, obwohl sie sich nicht in Gramm

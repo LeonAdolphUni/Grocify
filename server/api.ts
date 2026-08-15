@@ -18,7 +18,7 @@ import type { PantryItem } from '../src/domain/pantry';
 import type { Settings } from '../src/domain/settings';
 import type { Recipe } from '../src/domain/types';
 import { emptyWeek, WEEKDAYS, type WeekPlan } from '../src/domain/weekPlan';
-import { ChefkochError, importRecipe, searchRecipes } from './chefkoch';
+import { AllerhandeError, importRecipe, searchRecipes } from './allerhande';
 import { GrocifyDb, PLAN_ID } from './db';
 
 interface Route {
@@ -95,10 +95,9 @@ const ROUTES: Route[] = [
     handle: ({ db }) => db.getWeekPlan(),
   },
 
-  // ── Import von Chefkoch ────────────────────────────────────────────────
+  // ── Import aus Allerhande ──────────────────────────────────────────────
   // Läuft hier statt im Browser: Der käme wegen CORS nicht durch, und
-  // Änderungen an Chefkochs Schnittstelle bleiben so auf eine Datei
-  // beschränkt.
+  // Änderungen am Seitengerüst bleiben so auf eine Datei beschränkt.
 
   {
     method: 'GET',
@@ -112,19 +111,22 @@ const ROUTES: Route[] = [
 
   {
     method: 'POST',
-    path: '/api/import/:chefkochId',
+    path: '/api/import/:recipeId',
     handle: async ({ db, params }) => {
-      // Eigene ID vergeben: Chefkochs ID gehört Chefkoch, und das Rezept
-      // liegt ab jetzt in deinem Buch. Die Herkunft steht in sourceUrl.
-      const fetched = await importRecipe(params.chefkochId, newId());
+      // Eigene ID vergeben: AHs ID gehört AH, und das Rezept liegt ab jetzt
+      // in deinem Buch. Die Herkunft steht in sourceUrl.
+      const { recipe: fetched, nutrition, totalMinutes } = await importRecipe(
+        params.recipeId,
+        newId(),
+      );
 
       // Schon einmal geholt? Dann den vorhandenen Stand zurückgeben statt
       // eine zweite Kopie anzulegen. Wer das Rezept inzwischen angepasst hat
       // — andere Mengen, ein festgelegtes Produkt — behält seine Änderungen.
       const existing = fetched.sourceUrl ? db.findRecipeBySourceUrl(fetched.sourceUrl) : null;
-      if (existing) return { recipe: existing, alreadyInBook: true };
+      if (existing) return { recipe: existing, alreadyInBook: true, nutrition, totalMinutes };
 
-      return { recipe: db.saveRecipe(fetched), alreadyInBook: false };
+      return { recipe: db.saveRecipe(fetched), alreadyInBook: false, nutrition, totalMinutes };
     },
   },
 
@@ -348,8 +350,8 @@ export function createApi(db: GrocifyDb) {
     } catch (err) {
       if (err instanceof HttpError) return send(res, err.status, { error: err.message });
       // Fremde Quelle ausgefallen ist kein Serverfehler bei uns — 502 sagt
-      // dem Frontend, dass es an Chefkoch liegt und nicht am Backend.
-      if (err instanceof ChefkochError) return send(res, 502, { error: err.message });
+      // dem Frontend, dass es an Albert Heijn liegt und nicht am Backend.
+      if (err instanceof AllerhandeError) return send(res, 502, { error: err.message });
       console.error('[api]', err);
       send(res, 500, { error: (err as Error).message });
     }

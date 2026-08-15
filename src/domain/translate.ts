@@ -201,7 +201,7 @@ export function toDutchSearchTerm(germanName: string): string {
   const suffix = longestMatch(key, (k) => key.endsWith(k));
   if (suffix) return DE_TO_NL[suffix];
 
-  // Andersherum: Chefkoch schreibt die Einheit gern in den Namen
+  // Andersherum: Rezeptquellen schreiben die Einheit gern in den Namen
   // („Knoblauchzehe", „Selleriestange"). Dann steht die Zutat vorne.
   const prefix = longestMatch(key, (k) => key.startsWith(k));
   if (prefix) return DE_TO_NL[prefix];
