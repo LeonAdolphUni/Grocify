@@ -16,6 +16,7 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 import { parseIngredientInput } from '../domain/parseIngredient';
 import { pantryKey, stalestDays, type PantryItem } from '../domain/pantry';
 import { formatQuantity } from '../domain/units';
+import { JarIcon } from '../ui/icons';
 import { Kees } from '../ui/Kees';
 import { Button, Header, Notice, Screen } from '../ui/components';
 import { colors, fonts, radius, spacing } from '../ui/theme';
@@ -118,6 +119,7 @@ export function PantryScreen({ pantry, onSave, onDelete, onBack }: Props) {
         }
         renderItem={({ item }) => (
           <View style={s.row}>
+            <JarIcon size={20} color={colors.seed} />
             <View style={s.rowBody}>
               <Text style={s.name}>{item.name}</Text>
               <Text style={s.meta}>

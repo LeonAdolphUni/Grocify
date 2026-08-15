@@ -10,6 +10,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Recipe } from '../domain/types';
 import { Button, Card, Header, Screen } from '../ui/components';
+import { DownloadIcon } from '../ui/icons';
 import { Kees } from '../ui/Kees';
 import { colors, radius, spacing } from '../ui/theme';
 
@@ -59,7 +60,8 @@ export function RecipeListScreen({
               onPress={onImport}
               style={({ pressed }) => [s.importBtn, pressed && s.importBtnPressed]}
             >
-              <Text style={s.importBtnText}>⬇ Chefkoch</Text>
+              <DownloadIcon size={16} color="#3a2a00" />
+              <Text style={s.importBtnText}>Chefkoch</Text>
             </Pressable>
             <Button label="+ Neu" onPress={onCreate} />
           </View>
@@ -84,7 +86,7 @@ export function RecipeListScreen({
 
             <View style={s.emptyAction}>
               <Button label="Erstes Rezept anlegen" onPress={onCreate} />
-              <Button label="⬇ Von Chefkoch holen" onPress={onImport} variant="secondary" />
+              <Button label="Von Chefkoch holen" onPress={onImport} variant="secondary" />
               <Text style={s.emptyHint}>
                 Der Import übernimmt Titel, Portionen und Zutaten. Die Zubereitung
                 bleibt bei Chefkoch — ein Link führt hin.
@@ -149,10 +151,13 @@ const s = StyleSheet.create({
   list: { padding: spacing.lg, gap: spacing.md },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   importBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: 44,
     backgroundColor: colors.sun,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
   },
   importBtnPressed: { opacity: 0.75 },
   importBtnText: { color: '#3a2a00', fontWeight: '700', fontSize: 14 },

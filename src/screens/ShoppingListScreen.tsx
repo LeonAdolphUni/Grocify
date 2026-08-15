@@ -34,6 +34,7 @@ import { formatQuantity } from '../domain/units';
 import { getProvider } from '../supermarkets/registry';
 import { Header, Notice, Screen } from '../ui/components';
 import { Kees, keesSays, moodForUtilization } from '../ui/Kees';
+import { CartIcon, JarIcon } from '../ui/icons';
 import { Hop, SeedBurst, SinkIn } from '../ui/motion';
 import { Petals, Sunflower } from '../ui/Sunflower';
 import { categoryIcon, colors, euro, fonts, radius, spacing } from '../ui/theme';
@@ -234,9 +235,8 @@ export function ShoppingListScreen({ recipes, allRecipes, pantry, providerId, on
             accessibilityRole="switch"
             accessibilityState={{ checked: shopping }}
           >
-            <Text style={[s.modeText, shopping && s.modeTextOn]}>
-              {shopping ? '✓ Im Laden' : '🛒 Im Laden'}
-            </Text>
+            <CartIcon size={16} color={shopping ? '#3a2a00' : colors.onDark} />
+            <Text style={[s.modeText, shopping && s.modeTextOn]}>Im Laden</Text>
           </Pressable>
         }
         extra={
@@ -286,7 +286,7 @@ export function ShoppingListScreen({ recipes, allRecipes, pantry, providerId, on
           steht, dass sie fehlt, weil sie schon da ist. */}
       {!shopping && list.coveredByPantry && list.coveredByPantry.length > 0 ? (
         <Notice tone="info">
-          🥫 Aus dem Vorrat gedeckt, nicht auf der Liste:{' '}
+          Aus dem Vorrat gedeckt, nicht auf der Liste:{' '}
           {list.coveredByPantry.map((c) => `${c.name} (${formatQuantity(c.quantity)})`).join(', ')}
         </Notice>
       ) : null}
@@ -372,7 +372,7 @@ export function ShoppingListScreen({ recipes, allRecipes, pantry, providerId, on
                         die kleinere Kaufmenge wie ein Rechenfehler. */}
                     {entry.ingredient.fromPantry ? (
                       <Text style={s.fromPantry}>
-                        🥫 {entry.ingredient.fromPantry} aus dem Vorrat abgezogen
+                        {entry.ingredient.fromPantry} aus dem Vorrat abgezogen
                       </Text>
                     ) : null}
 
@@ -586,6 +586,9 @@ const s = StyleSheet.create({
   fromPantry: { fontSize: 11, color: colors.seed, marginTop: 3, fontWeight: '600' },
 
   modeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     minHeight: 44,
     justifyContent: 'center',
     paddingHorizontal: spacing.md,

@@ -25,6 +25,7 @@ import {
 
 import { ApiError, api, type ImportHit } from '../api/client';
 import { Header, Notice, Screen } from '../ui/components';
+import { DownloadIcon, PlateIcon } from '../ui/icons';
 import { colors, radius, spacing } from '../ui/theme';
 
 interface Props {
@@ -114,7 +115,7 @@ export function ImportScreen({ onImported, onBack }: Props) {
           ListEmptyComponent={
             error ? null : (
               <View style={s.empty}>
-                <Text style={s.emptyIcon}>🔎</Text>
+                <DownloadIcon size={34} color={colors.textFaint} />
                 <Text style={s.emptyText}>
                   {hits === null
                     ? 'Suche nach einem Gericht. Übernommen werden Titel, Portionen und Zutaten — die Zubereitung bleibt bei Chefkoch, dorthin führt ein Link.'
@@ -136,7 +137,7 @@ export function ImportScreen({ onImported, onBack }: Props) {
                   <Image source={{ uri: item.imageUrl }} style={s.thumb} />
                 ) : (
                   <View style={[s.thumb, s.thumbEmpty]}>
-                    <Text style={s.thumbIcon}>🍽️</Text>
+                    <PlateIcon size={26} color={colors.textFaint} />
                   </View>
                 )}
 

@@ -18,6 +18,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { Recipe } from '../domain/types';
 import { plannedDayCount, totalMeals, WEEKDAYS, type WeekPlan } from '../domain/weekPlan';
+import { BookIcon, CalendarIcon, ChevronIcon, JarIcon } from '../ui/icons';
 import { Kees, type Mood } from '../ui/Kees';
 import { Sunflower } from '../ui/Sunflower';
 import { Screen } from '../ui/components';
@@ -90,6 +91,12 @@ export function HomeScreen({
           <View style={s.heroText}>
             <Text style={s.greeting}>{greeting()}</Text>
             <Text style={s.brand}>Grocify</Text>
+            {/* Die Ausrichtung gehört nach oben, nicht in die Fußzeile:
+                Sie erklärt, warum Rezepte umgerechnet werden und warum es
+                keine Konten gibt. */}
+            <Text style={s.tagline}>
+              Wochenplan und Einkauf für {servingsPerMeal === 1 ? 'eine Person' : `${servingsPerMeal} Personen`}
+            </Text>
           </View>
           <Sunflower
             value={days / 7}
@@ -111,7 +118,7 @@ export function HomeScreen({
           style={({ pressed }) => [s.tile, s.tileWeek, pressed && s.pressed]}
         >
           <View style={s.tileTop}>
-            <Text style={s.tileIcon}>🪷</Text>
+            <CalendarIcon size={30} color={colors.onDark} />
             <View style={s.tileBadge}>
               <Text style={s.tileBadgeText}>{days}/7</Text>
             </View>
@@ -139,7 +146,7 @@ export function HomeScreen({
           style={({ pressed }) => [s.tile, s.tileRecipes, pressed && s.pressed]}
         >
           <View style={s.tileTop}>
-            <Text style={s.tileIcon}>📖</Text>
+            <BookIcon size={30} color="#3a2a00" />
             <View style={[s.tileBadge, s.tileBadgeDark]}>
               <Text style={[s.tileBadgeText, s.tileBadgeTextDark]}>{recipes.length}</Text>
             </View>
@@ -159,7 +166,7 @@ export function HomeScreen({
           onPress={onOpenPantry}
           style={({ pressed }) => [s.pantryTile, pressed && s.pressed]}
         >
-          <Text style={s.pantryIcon}>🥫</Text>
+          <JarIcon size={26} color={colors.seed} />
           <View style={s.pantryBody}>
             <Text style={s.pantryTitle}>Vorrat</Text>
             <Text style={s.pantrySub}>
@@ -168,7 +175,7 @@ export function HomeScreen({
                 : `${pantryCount} ${pantryCount === 1 ? 'Eintrag' : 'Einträge'} · wird vom Einkauf abgezogen`}
             </Text>
           </View>
-          <Text style={s.pantryChevron}>›</Text>
+          <ChevronIcon size={18} color={colors.textFaint} />
         </Pressable>
 
         {/* Portionen: die einzige Einstellung, die die App nicht selbst
@@ -215,8 +222,8 @@ export function HomeScreen({
         ) : null}
 
         <Text style={s.foot}>
-          Preise und Sortiment kommen live von Albert Heijn. Deine Rezepte liegen
-          lokal in deiner eigenen Datenbank.
+          Preise und Sortiment live von Albert Heijn · Deine Daten liegen lokal
+          in einer eigenen Datenbank, ohne Konto und ohne Cloud
         </Text>
       </ScrollView>
     </Screen>
@@ -230,12 +237,14 @@ const s = StyleSheet.create({
   heroText: { flex: 1 },
   greeting: { fontSize: 15, color: colors.textMuted, fontWeight: '600' },
   brand: {
-    fontSize: 40,
+    fontFamily: fonts.heading,
+    fontSize: 36,
     fontWeight: '800',
     color: colors.primaryDeep,
-    letterSpacing: -1.2,
+    letterSpacing: -1,
     marginTop: -2,
   },
+  tagline: { fontSize: 12.5, color: colors.textMuted, marginTop: 3, lineHeight: 17 },
 
   kees: {
     flexDirection: 'row',

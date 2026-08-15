@@ -22,6 +22,7 @@ import {
   type Weekday,
 } from '../domain/weekPlan';
 import { Button, Card, Header, Screen } from '../ui/components';
+import { PlateIcon } from '../ui/icons';
 import { colors, radius, recipeIcon, spacing } from '../ui/theme';
 
 interface Props {
@@ -128,7 +129,7 @@ export function WeekPlanScreen({
 
               {entries.length === 0 ? (
                 <Pressable onPress={() => setPickingFor(day)} style={s.emptyDay}>
-                  <Text style={s.emptyDayIcon}>🪷</Text>
+                  <PlateIcon size={18} color={colors.textFaint} />
                   <Text style={s.emptyDayText}>frei — tipp für ein Gericht</Text>
                 </Pressable>
               ) : (
@@ -137,7 +138,7 @@ export function WeekPlanScreen({
                   return (
                     <View key={`${day}-${id}`} style={s.meal}>
                       <Text style={s.mealIcon}>
-                        {recipe ? recipeIcon(recipe.title) : '❓'}
+                        {recipe ? recipeIcon(recipe.title) : '·'}
                       </Text>
                       <View style={s.mealBody}>
                         <Text style={s.mealTitle}>{recipe?.title ?? 'Unbekanntes Rezept'}</Text>
