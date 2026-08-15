@@ -263,7 +263,7 @@ Klassentausch, kein Umbau der App.
 | Sprint | Inhalt | Status |
 |---|---|---|
 | 0 | Projektgerüst, AH-Durchstich | ✅ |
-| 1 | Domänenkern: Einheiten, Typen | ✅ — 172 Tests, siehe unten |
+| 1 | Domänenkern: Einheiten, Typen | ✅ — 193 Tests, siehe unten |
 | 2 | Screens: Rezepte, Supermarkt, Einkaufsliste | ✅ |
 | 3 | Rezept-Parsing (Freitext, ohne LLM) | ✅ — `parseIngredient.ts`, 24 Fälle |
 | 3b | Rezept-Import von Chefkoch | ✅ |
@@ -275,12 +275,13 @@ Klassentausch, kein Umbau der App.
 | 9 | Persistenz | ✅ — SQLite über `node:sqlite`, eigenes Backend |
 | 10 | Wochenplan, Verwertungsquote, Restenutzung | ✅ |
 | 11 | Landingpage | ✅ — `landing/`, Spec in `DESIGN.md` |
-| 12 | Build, Release | offen |
+| 12 | Sicherung und Umzug (`npm run backup` / `restore`) | ✅ |
+| 13 | Build, Release | offen |
 
 ### Tests
 
 ```bash
-npm test        # 172 Tests, kein Netzwerk, unter zwei Sekunden
+npm test        # 193 Tests, kein Netzwerk
 ```
 
 Läuft über `node:test` — in Node eingebaut, keine neue Abhängigkeit.
@@ -308,6 +309,7 @@ Tomaten, Kürbisbrötchen statt Kürbis, `AH Tomaten passata gezeefd` statt
 | `db.test.ts` | 15 | `ON DELETE CASCADE` — gelöschtes Rezept verlässt den Wochenplan |
 | `api.test.ts` | 25 | Eingabeprüfung: was das Backend ablehnen muss |
 | `chefkoch.test.ts` | 17 | Pluralklammern, „nach Geschmack", Trennzeilen |
+| `backup.test.ts` | 21 | der ganze Kreis: Datenbank → JSON → **andere** Datenbank |
 
 Kein Test braucht Netzwerk. `db` und `api` bekommen je eine Wegwerf-Datenbank
 im temporären Ordner, `api` einen freien Port über `listen(0)`, und `chefkoch`
@@ -320,11 +322,34 @@ Zwei Tests haben beim ersten Lauf etwas gezeigt — beide über die Tests, nicht
 Plan statt ihn zu ergänzen — richtig so, es ist ein PUT. Beide Male wurde die
 Erwartung angepasst, nicht das Verhalten.
 
+### Sicherung
+
+Die Datenbank liegt bewusst **nicht** im Repo — sie enthält deine Rezepte,
+nicht den Code. Damit ist sie aber auch nur eine Datei auf einem Rechner:
+
+```bash
+npm run backup                                  # → server/data/backups/grocify-JJJJ-MM-TT-hhmm.json
+npm run backup -- --out D:/Sicherung/rezepte.json
+npm run restore -- server/data/backups/grocify-2026-08-15-1338.json
+```
+
+Gesichert wird als **lesbares JSON**, nicht als Kopie der `.db`-Datei. Eine
+SQLite-Datei braucht SQLite und das passende Schema; die JSON-Datei kann man
+in fünf Jahren mit jedem Texteditor öffnen und notfalls von Hand abtippen.
+Es ist außerdem der Weg, die Rezepte auf einen anderen Rechner mitzunehmen.
+
+**Was `restore` tut, im Klartext:** Rezepte werden nach ID angelegt oder
+überschrieben — **nichts wird gelöscht**. Rezepte, die es nur in der Datenbank
+gibt, bleiben unangetastet. Man holt eine Sicherung meist, weil etwas fehlt,
+nicht weil zu viel da ist. Der Wochenplan wird ersetzt; er ist ein einzelner
+Zustand, kein Bestand. Willst du exakt den gesicherten Stand und nichts sonst,
+lösche vorher `server/data/grocify.db`.
+
 ### Messwerkzeuge
 
 | Befehl | Was er misst |
 |---|---|
-| `npm test` | 172 Tests über Domäne und Backend, ohne Netzwerk |
+| `npm test` | 193 Tests über Domäne, Backend und Sicherung, ohne Netzwerk |
 | `npm run typecheck` | TypeScript |
 | `npm run smoke` | Albert-Heijn-Anbindung |
 | `npm run smoke:api` | Backend Ende zu Ende (eigene Wegwerf-Datenbank) |
