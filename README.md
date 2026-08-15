@@ -263,7 +263,7 @@ Klassentausch, kein Umbau der App.
 | Sprint | Inhalt | Status |
 |---|---|---|
 | 0 | Projektgerüst, AH-Durchstich | ✅ |
-| 1 | Domänenkern: Einheiten, Typen | ✅ — Tests für `units` und `shoppingList`, siehe unten |
+| 1 | Domänenkern: Einheiten, Typen | ✅ — 172 Tests, siehe unten |
 | 2 | Screens: Rezepte, Supermarkt, Einkaufsliste | ✅ |
 | 3 | Rezept-Parsing (Freitext, ohne LLM) | ✅ — `parseIngredient.ts`, 24 Fälle |
 | 3b | Rezept-Import von Chefkoch | ✅ |
@@ -280,7 +280,7 @@ Klassentausch, kein Umbau der App.
 ### Tests
 
 ```bash
-npm test        # 40 Tests, kein Netzwerk, unter einer Sekunde
+npm test        # 172 Tests, kein Netzwerk, unter zwei Sekunden
 ```
 
 Läuft über `node:test` — in Node eingebaut, keine neue Abhängigkeit.
@@ -297,25 +297,34 @@ Fall bildet eine Fehlzuordnung ab, die tatsächlich vorkam: Ketchup statt
 Tomaten, Kürbisbrötchen statt Kürbis, `AH Tomaten passata gezeefd` statt
 `AH Tomaten`.
 
-| Abgedeckt | Noch offen |
-|---|---|
-| `units.ts` — Umrechnung, mehrdeutige Einheiten, Skalierung | `translate.ts` |
-| `shoppingList.ts` — Produktwahl, Zusammenfassung, Randfälle | `weekPlan.ts`, `leftoverUse.ts` |
-| | `server/` — db, api, chefkoch |
+| Datei | Tests | Schwerpunkt |
+|---|---|---|
+| `units.test.ts` | 24 | Umrechnung — und dass „1 Bund" `null` ergibt statt eines geratenen Werts |
+| `parseIngredient.test.ts` | 29 | die Schreibweisen, die Menschen wirklich tippen |
+| `shoppingList.test.ts` | 16 | Produktwahl und Zusammenfassung, jeder Fall ein echter Fehler |
+| `translate.test.ts` | 15 | Nachschlage-Regeln, Umlaute, Wörterbuch als Datenbestand |
+| `weekPlan.test.ts` | 13 | dass **nicht** dedupliziert wird — zweimal geplant heißt zweimal einkaufen |
+| `stats.test.ts` | 18 | Verwertung nach Geld gewichtet, nicht nach Zeilen |
+| `db.test.ts` | 15 | `ON DELETE CASCADE` — gelöschtes Rezept verlässt den Wochenplan |
+| `api.test.ts` | 25 | Eingabeprüfung: was das Backend ablehnen muss |
+| `chefkoch.test.ts` | 17 | Pluralklammern, „nach Geschmack", Trennzeilen |
 
-`parseIngredient.ts` deckt `npm run smoke:parse` mit 24 Fällen ab; die gehören
-noch nach `tests/` überführt.
+Kein Test braucht Netzwerk. `db` und `api` bekommen je eine Wegwerf-Datenbank
+im temporären Ordner, `api` einen freien Port über `listen(0)`, und `chefkoch`
+eine `fetch`-Attrappe. Was echtes Netzwerk braucht, bleibt in den
+Messwerkzeugen unten.
 
-Ein Test hat beim ersten Lauf gleich etwas gezeigt — allerdings über mich:
-Ich hatte erwartet, dass `scale()` bei 0 Portionen still `Infinity` liefert.
-Tatsächlich wirft die Funktion einen expliziten Fehler. Der Test wurde an das
-Verhalten angepasst, nicht umgekehrt.
+Zwei Tests haben beim ersten Lauf etwas gezeigt — beide über die Tests, nicht
+über den Code: `scale()` wirft bei 0 Portionen bereits einen expliziten Fehler
+(ich hatte stilles `Infinity` erwartet), und `saveWeekPlan` ersetzt den ganzen
+Plan statt ihn zu ergänzen — richtig so, es ist ein PUT. Beide Male wurde die
+Erwartung angepasst, nicht das Verhalten.
 
 ### Messwerkzeuge
 
 | Befehl | Was er misst |
 |---|---|
-| `npm test` | Domänenkern, 40 Tests, ohne Netzwerk |
+| `npm test` | 172 Tests über Domäne und Backend, ohne Netzwerk |
 | `npm run typecheck` | TypeScript |
 | `npm run smoke` | Albert-Heijn-Anbindung |
 | `npm run smoke:api` | Backend Ende zu Ende (eigene Wegwerf-Datenbank) |
