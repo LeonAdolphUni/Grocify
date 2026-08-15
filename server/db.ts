@@ -17,6 +17,8 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import type { PantryItem } from '../src/domain/pantry';
+import { DEFAULT_SERVINGS } from '../src/domain/portions';
+import type { Settings } from '../src/domain/settings';
 import type { Ingredient, Recipe } from '../src/domain/types';
 import type { Unit } from '../src/domain/units';
 import { emptyWeek, WEEKDAYS, type WeekPlan, type Weekday } from '../src/domain/weekPlan';
@@ -71,6 +73,14 @@ CREATE TABLE IF NOT EXISTS week_plan_entries (
 );
 
 CREATE INDEX IF NOT EXISTS idx_entries_plan ON week_plan_entries(plan_id);
+
+-- Einstellungen als Schluessel-Wert-Paare. Bewusst kein Schema je
+-- Einstellung: Es sind wenige, sie aendern sich selten, und eine Tabelle
+-- mit einer Spalte je Option muesste bei jeder neuen Option wandern.
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 
 -- Was zu Hause steht. Keine Fremdschluessel: Der Vorrat haengt an keinem
 -- Rezept, er ueberlebt jedes. "240 g Reis" bleibt wahr, auch wenn das
@@ -283,6 +293,33 @@ export class GrocifyDb {
     }
 
     return this.getWeekPlan();
+  }
+
+  // ── Einstellungen ─────────────────────────────────────────────────
+
+  getSettings(): Settings {
+    const rows = this.db.prepare('SELECT key, value FROM settings').all() as {
+      key: string;
+      value: string;
+    }[];
+    const map = new Map(rows.map((r) => [r.key, r.value]));
+
+    // Standard ist eine Portion — der ganze Zweck dieser App.
+    const servings = Number(map.get('servingsPerMeal'));
+    return {
+      servingsPerMeal:
+        Number.isFinite(servings) && servings >= 1 ? Math.round(servings) : DEFAULT_SERVINGS,
+    };
+  }
+
+  saveSettings(settings: Settings): Settings {
+    this.db
+      .prepare(
+        `INSERT INTO settings (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      )
+      .run('servingsPerMeal', String(settings.servingsPerMeal));
+    return this.getSettings();
   }
 
   // ── Vorrat ────────────────────────────────────────────────────────

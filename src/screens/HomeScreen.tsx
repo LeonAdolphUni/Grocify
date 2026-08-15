@@ -30,6 +30,8 @@ interface Props {
   onOpenRecipes: () => void;
   onOpenPantry: () => void;
   pantryCount: number;
+  servingsPerMeal: number;
+  onChangeServings: (n: number) => void;
 }
 
 /** Tageszeit-Gruß. Kleine Geste, kostet nichts, macht die App weniger anonym. */
@@ -66,6 +68,8 @@ export function HomeScreen({
   onOpenRecipes,
   onOpenPantry,
   pantryCount,
+  servingsPerMeal,
+  onChangeServings,
 }: Props) {
   const days = plannedDayCount(plan);
   const meals = totalMeals(plan);
@@ -167,6 +171,49 @@ export function HomeScreen({
           <Text style={s.pantryChevron}>›</Text>
         </Pressable>
 
+        {/* Portionen: die einzige Einstellung, die die App nicht selbst
+            treffen kann. Sie steht hier statt auf einer Einstellungsseite,
+            weil sie jede Zahl in dieser App beeinflusst — Mengen, Preise,
+            Nährwerte. Eine Einstellung, die man suchen muss, findet man nie. */}
+        <View style={s.servings}>
+          <View style={s.servingsHead}>
+            <Text style={s.servingsTitle}>Du kochst für</Text>
+            <Text style={s.servingsHint}>
+              Rezepte werden darauf umgerechnet — das Original bleibt erhalten.
+            </Text>
+          </View>
+          <View style={s.servingsPicker}>
+            {[1, 2, 3, 4].map((n) => {
+              const aktiv = servingsPerMeal === n;
+              return (
+                <Pressable
+                  key={n}
+                  onPress={() => onChangeServings(n)}
+                  style={({ pressed }) => [
+                    s.servingsBtn,
+                    aktiv && s.servingsBtnOn,
+                    pressed && s.pressed,
+                  ]}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: aktiv }}
+                  accessibilityLabel={`${n} ${n === 1 ? 'Portion' : 'Portionen'}`}
+                >
+                  <Text style={[s.servingsBtnText, aktiv && s.servingsBtnTextOn]}>{n}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {servingsPerMeal === 1 ? (
+          <Text style={s.servingsNote}>
+            ⚠️ Packungen lassen sich nicht vierteln. Gemessen an einer echten
+            Woche: bei 1 Portion werden nur 40 % des Eingekauften verkocht, bei
+            2 Portionen schon 63 % — für 70 Cent mehr im Einkauf. Wer zweimal
+            kocht und zweimal isst, zahlt je Portion die Hälfte.
+          </Text>
+        ) : null}
+
         <Text style={s.foot}>
           Preise und Sortiment kommen live von Albert Heijn. Deine Rezepte liegen
           lokal in deiner eigenen Datenbank.
@@ -240,6 +287,45 @@ const s = StyleSheet.create({
 
   preview: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   previewIcon: { fontSize: 22 },
+
+  servings: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+  servingsHead: { flex: 1 },
+  servingsTitle: { fontFamily: fonts.heading, fontSize: 15, fontWeight: '700', color: colors.text },
+  servingsHint: { fontSize: 11, color: colors.textFaint, marginTop: 2, lineHeight: 16 },
+  servingsPicker: { flexDirection: 'row', gap: spacing.xs },
+  servingsBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  servingsBtnOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  servingsBtnText: {
+    fontFamily: fonts.heading,
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textMuted,
+  },
+  servingsBtnTextOn: { color: colors.onDark },
+  servingsNote: {
+    fontSize: 11,
+    color: colors.textFaint,
+    lineHeight: 16,
+    paddingHorizontal: spacing.xs,
+    marginTop: -spacing.sm,
+  },
 
   pantryTile: {
     flexDirection: 'row',

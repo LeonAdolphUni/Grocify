@@ -244,6 +244,27 @@ Partnerschaft oder einen kommerziellen Anbieter umgestellt werden. Genau
 dafür existiert das `PriceProvider`-Interface: Der Wechsel ist ein
 Klassentausch, kein Umbau der App.
 
+## Portionen: für eine Person gerechnet
+
+Grocify ist für **eine Person** gebaut, Rezepte sind es nie — Chefkoch
+liefert vier bis acht Portionen. Jedes Rezept wird deshalb beim *Benutzen*
+auf die eingestellte Portionszahl umgerechnet (Standard: 1). Das Original
+bleibt in der Datenbank unangetastet, samt Herkunftsangabe.
+
+**Das hat einen messbaren Preis.** Derselbe Wochenplan, dreimal gerechnet:
+
+| Portionen | Einkauf | Verwertung | je Portion |
+|---|---|---|---|
+| 1 | 29,20 € | **40 %** | 4,17 € |
+| 2 | 29,90 € | 63 % | 2,14 € |
+| 4 | 40,17 € | 85 % | 1,43 € |
+
+Packungen lassen sich nicht vierteln: Ein halbes Ei kann man nicht kaufen,
+ein Sechstel Kürbis auch nicht. Je kleiner man rechnet, desto mehr bleibt
+liegen. Von 1 auf 2 Portionen kostet **70 Cent mehr** und halbiert den
+Preis je Portion — deshalb ist die Zahl einstellbar und der Hinweis steht
+auf dem Startbildschirm, statt versteckt zu sein.
+
 ## Bewusste Entwurfsentscheidungen
 
 - **Mehrdeutige Einheiten werden nicht geraten.** „1 Bund Petersilie" (≈ 30 g)

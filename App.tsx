@@ -13,6 +13,8 @@ import { StatusBar } from 'expo-status-bar';
 
 import { ApiError, api } from './src/api/client';
 import type { PantryItem } from './src/domain/pantry';
+import { scaleAll, scaleRecipe } from './src/domain/portions';
+import { DEFAULT_SETTINGS, type Settings } from './src/domain/settings';
 import type { Recipe } from './src/domain/types';
 import {
   emptyWeek,
@@ -51,6 +53,7 @@ export default function App() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [plan, setPlan] = useState<WeekPlan>(() => emptyWeek('week-1'));
   const [pantry, setPantry] = useState<PantryItem[]>([]);
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [loading, setLoading] = useState(true);
@@ -64,14 +67,16 @@ export default function App() {
     setLoading(true);
     setFatal(null);
     try {
-      const [loadedRecipes, loadedPlan, loadedPantry] = await Promise.all([
+      const [loadedRecipes, loadedPlan, loadedPantry, loadedSettings] = await Promise.all([
         api.listRecipes(),
         api.getWeekPlan(),
         api.listPantry(),
+        api.getSettings(),
       ]);
       setRecipes(loadedRecipes);
       setPlan(loadedPlan);
       setPantry(loadedPantry);
+      setSettings(loadedSettings);
     } catch (err) {
       setFatal(
         err instanceof ApiError
@@ -264,10 +269,53 @@ export default function App() {
     [recipes, plan],
   );
 
-  const planRecipes = useMemo(() => recipesInPlan(plan, recipes), [plan, recipes]);
+  /**
+   * Portionszahl ändern.
+   *
+   * Wirkt sofort auf alles, was daraus entsteht — Einkaufsliste, Nährwerte,
+   * Portionsanzeige. Die Rezepte selbst bleiben unangetastet: In der
+   * Datenbank steht weiter „6 Portionen laut Chefkoch".
+   */
+  const changeServings = useCallback(async (servingsPerMeal: number) => {
+    const vorher = settings;
+    setSettings({ servingsPerMeal });
+    try {
+      setSettings(await api.saveSettings({ servingsPerMeal }));
+      setToast({
+        text:
+          servingsPerMeal === 1
+            ? 'Rezepte werden auf 1 Portion gerechnet'
+            : `Rezepte werden auf ${servingsPerMeal} Portionen gerechnet`,
+      });
+    } catch (err) {
+      setSettings(vorher);
+      setFatal(err instanceof ApiError ? err.message : (err as Error).message);
+    }
+  }, [settings]);
+
+  /**
+   * Alle Rezepte auf die eingestellte Portionszahl umgerechnet.
+   *
+   * Grocify ist für eine Person gebaut, Rezepte sind es nie — Chefkoch
+   * liefert vier bis acht Portionen. Ohne diese Umrechnung kauft die App
+   * jede Woche ein Vielfaches des Bedarfs ein.
+   *
+   * Umgerechnet wird beim *Benutzen*, nicht beim Speichern: Das Original
+   * behält seine Herkunftsangabe, und wer die Portionszahl später ändert,
+   * verliert nichts.
+   */
+  const scaledRecipes = useMemo(
+    () => scaleAll(recipes, settings.servingsPerMeal),
+    [recipes, settings.servingsPerMeal],
+  );
+
+  const planRecipes = useMemo(
+    () => recipesInPlan(plan, scaledRecipes),
+    [plan, scaledRecipes],
+  );
   const selectedRecipes = useMemo(
-    () => recipes.filter((r) => selectedIds.includes(r.id)),
-    [recipes, selectedIds],
+    () => scaledRecipes.filter((r) => selectedIds.includes(r.id)),
+    [scaledRecipes, selectedIds],
   );
 
   if (loading) {
@@ -305,18 +353,20 @@ export default function App() {
       {route.name === 'home' && (
         <HomeScreen
           plan={plan}
-          recipes={recipes}
+          recipes={scaledRecipes}
           onOpenWeek={() => setRoute({ name: 'week' })}
           onOpenRecipes={() => setRoute({ name: 'recipes' })}
           onOpenPantry={() => setRoute({ name: 'pantry' })}
           pantryCount={pantry.length}
+          servingsPerMeal={settings.servingsPerMeal}
+          onChangeServings={changeServings}
         />
       )}
 
       {route.name === 'week' && (
         <WeekPlanScreen
           plan={plan}
-          recipes={recipes}
+          recipes={scaledRecipes}
           onAddRecipe={addToDay}
           onRemoveRecipe={removeFromDay}
           onClearWeek={clearWeek}
@@ -329,7 +379,7 @@ export default function App() {
 
       {route.name === 'recipes' && (
         <RecipeListScreen
-          recipes={recipes}
+          recipes={scaledRecipes}
           selectedIds={selectedIds}
           onToggleSelect={(id) =>
             setSelectedIds((ids) =>
@@ -355,7 +405,7 @@ export default function App() {
 
       {route.name === 'recipe' &&
         (() => {
-          const recipe = recipes.find((r) => r.id === route.recipeId);
+          const recipe = scaledRecipes.find((r) => r.id === route.recipeId);
           if (!recipe) return null;
           return (
             <RecipeDetailScreen
@@ -378,6 +428,10 @@ export default function App() {
 
       {route.name === 'edit' && (
         <RecipeEditScreen
+          // Bewusst das **Original**, nicht die umgerechnete Fassung: Wer ein
+          // Rezept bearbeitet und speichert, würde sonst die Umrechnung
+          // festschreiben — aus „6 Portionen laut Chefkoch" würde dauerhaft
+          // „1 Portion", und die Herkunftsangabe wäre weg.
           recipe={recipes.find((r) => r.id === route.recipeId)}
           onSave={handleSave}
           onCancel={() => setRoute({ name: 'recipes' })}
@@ -395,7 +449,7 @@ export default function App() {
       {route.name === 'list' && (
         <ShoppingListScreen
           recipes={route.source}
-          allRecipes={recipes}
+          allRecipes={scaledRecipes}
           pantry={pantry}
           providerId={route.providerId}
           onBack={() => setRoute({ name: 'home' })}

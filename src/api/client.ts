@@ -8,6 +8,7 @@
  */
 
 import type { PantryItem } from '../domain/pantry';
+import type { Settings } from '../domain/settings';
 import type { Recipe } from '../domain/types';
 import type { WeekPlan } from '../domain/weekPlan';
 
@@ -113,6 +114,11 @@ export const api = {
 
   saveWeekPlan: (plan: WeekPlan) =>
     request<WeekPlan>('/week-plan', { method: 'PUT', body: JSON.stringify(plan) }),
+
+  getSettings: () => request<Settings>('/settings'),
+
+  saveSettings: (settings: Settings) =>
+    request<Settings>('/settings', { method: 'PUT', body: JSON.stringify(settings) }),
 
   listPantry: () => request<PantryItem[]>('/pantry'),
 

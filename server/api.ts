@@ -15,6 +15,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 
 import { newId } from '../src/domain/id';
 import type { PantryItem } from '../src/domain/pantry';
+import type { Settings } from '../src/domain/settings';
 import type { Recipe } from '../src/domain/types';
 import { emptyWeek, WEEKDAYS, type WeekPlan } from '../src/domain/weekPlan';
 import { ChefkochError, importRecipe, searchRecipes } from './chefkoch';
@@ -131,6 +132,30 @@ const ROUTES: Route[] = [
     method: 'PUT',
     path: '/api/week-plan',
     handle: ({ db, body }) => db.saveWeekPlan(assertWeekPlan(body)),
+  },
+
+  // ── Einstellungen ──────────────────────────────────────────────────────
+
+  {
+    method: 'GET',
+    path: '/api/settings',
+    handle: ({ db }) => db.getSettings(),
+  },
+
+  {
+    method: 'PUT',
+    path: '/api/settings',
+    handle: ({ db, body }) => {
+      if (typeof body !== 'object' || body === null) {
+        throw new HttpError(400, 'Erwartet wird ein Einstellungs-Objekt');
+      }
+      const s = body as Partial<Settings>;
+      const portionen = Number(s.servingsPerMeal);
+      if (!Number.isFinite(portionen) || portionen < 1 || portionen > 12) {
+        throw new HttpError(400, 'servingsPerMeal muss zwischen 1 und 12 liegen');
+      }
+      return db.saveSettings({ servingsPerMeal: Math.round(portionen) });
+    },
   },
 
   // ── Vorrat ─────────────────────────────────────────────────────────────
