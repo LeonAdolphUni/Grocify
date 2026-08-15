@@ -122,6 +122,44 @@ describe('chooseBestProduct — Rückfall aufs Grundwort', () => {
   });
 });
 
+describe('chooseBestProduct — lieber nichts als etwas Falsches', () => {
+  it('trägt kein Treffer den Begriff, wird nichts vorgeschlagen', () => {
+    // Der Kondom-Fall vom 15.08.: „Nudel" stand nicht im Wörterbuch, ging
+    // unübersetzt an AH, dessen unscharfe Suche daraus „nude" machte — und
+    // weil kein Treffer das Wort „nudel" enthielt, griff der Relevanzfilter
+    // nicht und das billigste Ergebnis gewann.
+    //
+    // Jetzt kommt gar kein Vorschlag: Die Zeile wird als „selbst zuordnen"
+    // markiert. Ein sichtbares Loch füllt der Nutzer, eine falsche Zeile
+    // übersieht er bis zur Kasse.
+    const best = chooseBestProduct(
+      [
+        p('Durex Condooms nude classic', 12.37, '1 stuk'),
+        p("L'Oreal Paris nude magique CC cream", 17.99, '1 stuk'),
+      ],
+      required(500, 'mass'),
+      'nudel',
+    );
+    assert.equal(best, null);
+  });
+
+  it('ein einziger echter Treffer reicht aber', () => {
+    const best = chooseBestProduct(
+      [p('Durex Condooms nude classic', 12.37), p('AH Nudelsoep', 1.29, '570 ml')],
+      required(500, 'volume'),
+      'nudel',
+    );
+    assert.equal(best?.product.title, 'AH Nudelsoep');
+  });
+
+  it('ohne Suchbegriff bleibt die alte Regel: das billigste gewinnt', () => {
+    // Dieser Weg wird genutzt, wenn der Nutzer selbst ein Produkt festgelegt
+    // hat — dann gibt es nichts zu filtern.
+    const best = chooseBestProduct([p('Irgendwas', 3.0), p('Billiger', 1.0)], null, '');
+    assert.equal(best?.product.title, 'Billiger');
+  });
+});
+
 describe('chooseBestProduct — Randfälle', () => {
   it('leere Kandidatenliste gibt null statt zu werfen', () => {
     assert.equal(chooseBestProduct([], required(100, 'mass'), 'egal'), null);

@@ -192,14 +192,24 @@ export function chooseBestProduct(
       }
     }
 
-    if (bestTier < 3) {
-      const sameTier = pool.filter((p) => matchTier(p.title, term) === bestTier);
-      // Dann die Zusatzwörter: „AH Tomaten" schlägt „AH Tomaten gepeld",
-      // frisch schlägt Dose. Keine Toleranz — schon ein Wort verschiebt
-      // die Bedeutung.
-      const minExtra = Math.min(...sameTier.map((p) => extraWordCount(p.title, term)));
-      pool = sameTier.filter((p) => extraWordCount(p.title, term) === minExtra);
-    }
+    // Trägt kein einziger Treffer den gesuchten Begriff, ist keiner davon
+    // das gesuchte Produkt. Früher gewann hier trotzdem das billigste
+    // Suchergebnis — und weil AHs Suche unscharf arbeitet, kamen dabei
+    // Ergebnisse heraus, die mit der Zutat nichts zu tun haben: „Nudel"
+    // (nicht im Wörterbuch, also unübersetzt) traf auf „nude" und lieferte
+    // Kondome.
+    //
+    // Lieber gar kein Vorschlag als ein falscher: Die Zeile wird dann als
+    // „selbst zuordnen" markiert. Ein sichtbares Loch kann der Nutzer
+    // füllen, eine falsche Zeile übersieht er bis zur Kasse.
+    if (bestTier === 3) return null;
+
+    const sameTier = pool.filter((p) => matchTier(p.title, term) === bestTier);
+    // Dann die Zusatzwörter: „AH Tomaten" schlägt „AH Tomaten gepeld",
+    // frisch schlägt Dose. Keine Toleranz — schon ein Wort verschiebt
+    // die Bedeutung.
+    const minExtra = Math.min(...sameTier.map((p) => extraWordCount(p.title, term)));
+    pool = sameTier.filter((p) => extraWordCount(p.title, term) === minExtra);
   }
 
   const score = (product: Product) => {

@@ -36,8 +36,14 @@ export const DE_TO_NL: Record<string, string> = {
   zimt: 'kaneel',
   haferflocken: 'havermout',
   reis: 'rijst',
+  nudel: 'pasta',
   nudeln: 'pasta',
   spaghetti: 'spaghetti',
+  gnocchi: 'gnocchi',
+  tagliatelle: 'tagliatelle',
+  penne: 'penne',
+  lasagneplatten: 'lasagne',
+  couscous: 'couscous',
   linsen: 'linzen',
   kichererbsen: 'kikkererwten',
 
@@ -48,6 +54,12 @@ export const DE_TO_NL: Record<string, string> = {
   sahne: 'slagroom',
   schlagsahne: 'slagroom',
   saure_sahne: 'zure room',
+  // Schmand hat im niederländischen Regal kein sauberes Gegenstück.
+  // Crème fraîche ist der praktische Ersatz und überall vorrätig — das ist
+  // Produktkunde, keine Übersetzung.
+  schmand: 'creme fraiche',
+  creme_fraiche: 'creme fraiche',
+  cremefraiche: 'creme fraiche',
   quark: 'kwark',
   joghurt: 'yoghurt',
   frischkaese: 'roomkaas',
