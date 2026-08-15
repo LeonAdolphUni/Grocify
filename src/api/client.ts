@@ -7,6 +7,7 @@
  * liegen sie in einer Datenbankdatei, die du sichern und mitnehmen kannst.
  */
 
+import type { PantryItem } from '../domain/pantry';
 import type { Recipe } from '../domain/types';
 import type { WeekPlan } from '../domain/weekPlan';
 
@@ -112,6 +113,17 @@ export const api = {
 
   saveWeekPlan: (plan: WeekPlan) =>
     request<WeekPlan>('/week-plan', { method: 'PUT', body: JSON.stringify(plan) }),
+
+  listPantry: () => request<PantryItem[]>('/pantry'),
+
+  savePantryItem: (item: PantryItem) =>
+    request<PantryItem>(`/pantry/${encodeURIComponent(item.id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(item),
+    }),
+
+  deletePantryItem: (id: string) =>
+    request<{ deleted: string }>(`/pantry/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   /** Rezepte bei Chefkoch suchen. Läuft über das Backend, nicht im Browser. */
   searchImport: (query: string) =>

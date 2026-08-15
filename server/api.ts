@@ -14,6 +14,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
 import { newId } from '../src/domain/id';
+import type { PantryItem } from '../src/domain/pantry';
 import type { Recipe } from '../src/domain/types';
 import { emptyWeek, WEEKDAYS, type WeekPlan } from '../src/domain/weekPlan';
 import { ChefkochError, importRecipe, searchRecipes } from './chefkoch';
@@ -131,6 +132,31 @@ const ROUTES: Route[] = [
     path: '/api/week-plan',
     handle: ({ db, body }) => db.saveWeekPlan(assertWeekPlan(body)),
   },
+
+  // ── Vorrat ─────────────────────────────────────────────────────────────
+
+  {
+    method: 'GET',
+    path: '/api/pantry',
+    handle: ({ db }) => db.listPantry(),
+  },
+
+  {
+    method: 'PUT',
+    path: '/api/pantry/:id',
+    handle: ({ db, params, body }) => db.savePantryItem(assertPantryItem(body, params.id)),
+  },
+
+  {
+    method: 'DELETE',
+    path: '/api/pantry/:id',
+    handle: ({ db, params }) => {
+      if (!db.deletePantryItem(params.id)) {
+        throw new HttpError(404, `Vorratseintrag ${params.id} gibt es nicht`);
+      }
+      return { deleted: params.id };
+    },
+  },
 ];
 
 /**
@@ -168,6 +194,42 @@ function assertRecipe(body: unknown, id: string): Recipe {
   // Die ID aus dem Pfad gewinnt — sonst könnte ein Aufruf an
   // /api/recipes/A ein Rezept mit der ID B anlegen.
   return { ...(r as Recipe), id };
+}
+
+/**
+ * Prüft einen Vorratseintrag.
+ *
+ * Strenger als es scheint: Eine Menge von 0 oder weniger ist kein Vorrat,
+ * sondern die Aussage „habe ich nicht" — und die gehört als Löschung
+ * ausgedrückt, nicht als Eintrag. Sonst zieht die Einkaufsliste später
+ * Nullmengen ab und niemand versteht, warum nichts passiert.
+ */
+function assertPantryItem(body: unknown, id: string): PantryItem {
+  if (typeof body !== 'object' || body === null) {
+    throw new HttpError(400, 'Erwartet wird ein Vorrats-Objekt');
+  }
+  const p = body as Partial<PantryItem>;
+
+  if (typeof p.name !== 'string' || !p.name.trim()) {
+    throw new HttpError(400, 'name fehlt oder ist leer');
+  }
+  if (!p.quantity || typeof p.quantity.amount !== 'number' || Number.isNaN(p.quantity.amount)) {
+    throw new HttpError(400, 'quantity.amount fehlt oder ist keine Zahl');
+  }
+  if (p.quantity.amount <= 0) {
+    throw new HttpError(400, 'Menge muss größer als 0 sein — sonst lösche den Eintrag');
+  }
+  if (typeof p.quantity.unit !== 'string' || !p.quantity.unit) {
+    throw new HttpError(400, 'quantity.unit fehlt');
+  }
+
+  return {
+    id,
+    name: p.name.trim(),
+    quantity: p.quantity,
+    note: typeof p.note === 'string' && p.note.trim() ? p.note.trim() : undefined,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 function assertWeekPlan(body: unknown): WeekPlan {

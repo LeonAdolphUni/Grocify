@@ -76,6 +76,7 @@ export function NutritionPanel({ nutrition, compact }: Props) {
 
       <View style={s.foot}>
         <Text style={s.footHead}>Gerechnet aus {coverageLabel(nutrition)}</Text>
+
         {nutrition.missing.length > 0 ? (
           <Text style={s.footText}>
             Nicht enthalten: {nutrition.missing.map((m) => m.name).join(', ')}
@@ -83,6 +84,16 @@ export function NutritionPanel({ nutrition, compact }: Props) {
         ) : (
           <Text style={s.footText}>Alle Zutaten konnten berücksichtigt werden.</Text>
         )}
+
+        {/* Geschätzt heißt: Durchschnittswert statt Herstellerangabe. Der
+            Unterschied gehört sichtbar — bei Gemüse ist er klein, bei Käse
+            und Wurst streuen die echten Werte deutlich. */}
+        {nutrition.estimated.length > 0 ? (
+          <Text style={s.footEstimated}>
+            ≈ Geschätzt aus Durchschnittswerten: {nutrition.estimated.join(', ')} — der
+            Händler meldet dafür keine Nährwerte.
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -149,6 +160,7 @@ const s = StyleSheet.create({
   foot: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, gap: 2 },
   footHead: { fontSize: 11, fontWeight: '700', color: colors.textMuted, letterSpacing: 0.3 },
   footText: { fontSize: 11, color: colors.textFaint, lineHeight: 16 },
+  footEstimated: { fontSize: 11, color: colors.seed, lineHeight: 16, marginTop: 2 },
 
   compact: { gap: 1 },
   compactValue: { fontFamily: fonts.heading, fontSize: 15, fontWeight: '700', color: colors.primary },

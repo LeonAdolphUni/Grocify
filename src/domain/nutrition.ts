@@ -22,6 +22,7 @@
  * Öl und Mehl kauft man nicht jede Woche, gegessen werden sie trotzdem.
  */
 
+import { averageNutrition } from './nutritionTable';
 import { normalizeKey } from './translate';
 import type { Ingredient, Product, Recipe } from './types';
 import { toMassForIngredient } from './units';
@@ -61,6 +62,16 @@ export interface RecipeNutrition {
   totalIngredients: number;
   /** Was fehlt, mit Grund — die Anzeige soll es benennen können. */
   missing: MissingIngredient[];
+  /**
+   * Zutaten, deren Werte aus der Durchschnittstabelle stammen statt vom
+   * Händler. Namentlich, damit die Oberfläche es benennen kann.
+   *
+   * Der Unterschied ist keine Formalie: Eine Herstellerangabe gilt für
+   * *dieses* Produkt, ein Durchschnittswert für „so etwas in der Art".
+   * Bei Gemüse ist das unkritisch, bei Käse und Wurst streuen die echten
+   * Werte deutlich.
+   */
+  estimated: string[];
 }
 
 const FIELDS = [
@@ -170,6 +181,7 @@ export async function nutritionForRecipe(
   let total: NutritionFacts = {};
   let covered = 0;
   const missing: MissingIngredient[] = [];
+  const estimated: string[] = [];
 
   for (const ing of recipe.ingredients) {
     // `toMassForIngredient` rechnet Stückmengen über die Gewichtstabelle in
@@ -189,34 +201,48 @@ export async function nutritionForRecipe(
       // Ein Ausfall der Datenquelle ist kein Grund, die ganze Rechnung
       // abzubrechen — die Zutat fehlt dann eben, und das steht dann da.
     }
-    if (!produkt) {
-      missing.push({ name: ing.name, reason: 'kein Produkt' });
-      continue;
+
+    let nutrition: Nutrition | null = null;
+
+    if (produkt) {
+      const gecacht = cache.get(produkt.id);
+      if (gecacht !== undefined) {
+        nutrition = gecacht;
+      } else {
+        try {
+          nutrition = (await provider.getNutrition?.(produkt.id)) ?? null;
+        } catch {
+          nutrition = null;
+        }
+        cache.set(produkt.id, nutrition);
+      }
     }
 
-    let nutrition = cache.get(produkt.id);
-    if (nutrition === undefined) {
-      try {
-        nutrition = (await provider.getNutrition?.(produkt.id)) ?? null;
-      } catch {
-        nutrition = null;
-      }
-      cache.set(produkt.id, nutrition);
+    // Rückfall auf Durchschnittswerte. Greift in zwei Fällen: Der Händler
+    // meldet nichts (Frischware, Backtheke) oder es gibt gar kein Produkt.
+    // Ohne ihn fiel für eine Gurke jede Kalorie unter den Tisch — und das
+    // zog die Gesamtzahl systematisch nach unten.
+    let geschaetzt = false;
+    if (!nutrition) {
+      nutrition = averageNutrition(ing.name);
+      geschaetzt = nutrition !== null;
     }
 
     if (!nutrition) {
-      missing.push({ name: ing.name, reason: 'keine Nährwerte' });
+      missing.push({ name: ing.name, reason: produkt ? 'keine Nährwerte' : 'kein Produkt' });
       continue;
     }
 
     const facts = scaleNutrition(nutrition, base.amount, base.dimension);
     if (!facts) {
+      // Bezugsgröße passt nicht — etwa Öl in Gramm gegen Werte je 100 ml.
       missing.push({ name: ing.name, reason: 'keine Nährwerte' });
       continue;
     }
 
     total = addFacts(total, facts);
     covered++;
+    if (geschaetzt) estimated.push(ing.name);
   }
 
   const servings = Math.max(1, recipe.servings);
@@ -228,6 +254,7 @@ export async function nutritionForRecipe(
     covered,
     totalIngredients: recipe.ingredients.length,
     missing,
+    estimated,
   };
 }
 

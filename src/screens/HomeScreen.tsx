@@ -21,13 +21,15 @@ import { plannedDayCount, totalMeals, WEEKDAYS, type WeekPlan } from '../domain/
 import { Kees, type Mood } from '../ui/Kees';
 import { Sunflower } from '../ui/Sunflower';
 import { Screen } from '../ui/components';
-import { colors, radius, recipeIcon, spacing } from '../ui/theme';
+import { colors, fonts, radius, recipeIcon, spacing } from '../ui/theme';
 
 interface Props {
   plan: WeekPlan;
   recipes: Recipe[];
   onOpenWeek: () => void;
   onOpenRecipes: () => void;
+  onOpenPantry: () => void;
+  pantryCount: number;
 }
 
 /** Tageszeit-Gruß. Kleine Geste, kostet nichts, macht die App weniger anonym. */
@@ -57,7 +59,14 @@ function statusLine(days: number, recipeCount: number): { text: string; mood: Mo
   return { text: `Erst ${days} ${days === 1 ? 'Tag' : 'Tage'} geplant. Mehr Tage, weniger Reste.`, mood: 'content' };
 }
 
-export function HomeScreen({ plan, recipes, onOpenWeek, onOpenRecipes }: Props) {
+export function HomeScreen({
+  plan,
+  recipes,
+  onOpenWeek,
+  onOpenRecipes,
+  onOpenPantry,
+  pantryCount,
+}: Props) {
   const days = plannedDayCount(plan);
   const meals = totalMeals(plan);
   const status = statusLine(days, recipes.length);
@@ -139,6 +148,25 @@ export function HomeScreen({ plan, recipes, onOpenWeek, onOpenRecipes }: Props) 
           </Text>
         </Pressable>
 
+        {/* Dritter Weg, bewusst schmaler als die beiden großen: Der Vorrat
+            ist Zuarbeit, kein Ziel. Man geht hier hin, um den Einkauf
+            besser zu machen — nicht, um Vorräte zu verwalten. */}
+        <Pressable
+          onPress={onOpenPantry}
+          style={({ pressed }) => [s.pantryTile, pressed && s.pressed]}
+        >
+          <Text style={s.pantryIcon}>🥫</Text>
+          <View style={s.pantryBody}>
+            <Text style={s.pantryTitle}>Vorrat</Text>
+            <Text style={s.pantrySub}>
+              {pantryCount === 0
+                ? 'Was hast du schon zu Hause? Wird vom Einkauf abgezogen.'
+                : `${pantryCount} ${pantryCount === 1 ? 'Eintrag' : 'Einträge'} · wird vom Einkauf abgezogen`}
+            </Text>
+          </View>
+          <Text style={s.pantryChevron}>›</Text>
+        </Pressable>
+
         <Text style={s.foot}>
           Preise und Sortiment kommen live von Albert Heijn. Deine Rezepte liegen
           lokal in deiner eigenen Datenbank.
@@ -213,6 +241,21 @@ const s = StyleSheet.create({
   preview: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   previewIcon: { fontSize: 22 },
 
+  pantryTile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surfaceWarm,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+  pantryIcon: { fontSize: 30 },
+  pantryBody: { flex: 1 },
+  pantryTitle: { fontFamily: fonts.heading, fontSize: 16, fontWeight: '700', color: colors.text },
+  pantrySub: { fontSize: 12, color: colors.textMuted, marginTop: 2, lineHeight: 17 },
+  pantryChevron: { fontSize: 22, color: colors.textFaint },
   foot: {
     fontSize: 12,
     color: colors.textFaint,

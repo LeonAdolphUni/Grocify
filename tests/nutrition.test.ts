@@ -155,12 +155,23 @@ describe('nutritionForRecipe', () => {
   });
 
   it('benennt Zutaten ohne Nährwerte, statt sie zu verschweigen', async () => {
-    const r = recipe([ing('Hackfleisch', 500, 'g', 'gehakt'), ing('Petersilie', 20, 'g', 'kruid')]);
+    // „Wunderpulver" steht weder beim Händler noch in der
+    // Durchschnittstabelle — nur so bleibt eine Zutat wirklich unbekannt.
+    // Petersilie taugt dafür nicht mehr: Sie steht in der Tabelle und wird
+    // deshalb geschätzt statt weggelassen.
+    const r = recipe([ing('Hackfleisch', 500, 'g', 'gehakt'), ing('Wunderpulver', 20, 'g', 'x')]);
     const n = await nutritionForRecipe(r, fakeProvider());
     assert.equal(n.covered, 1);
     assert.equal(n.missing.length, 1);
-    assert.equal(n.missing[0].name, 'Petersilie');
+    assert.equal(n.missing[0].name, 'Wunderpulver');
     assert.equal(n.missing[0].reason, 'keine Nährwerte');
+  });
+
+  it('eine Zutat aus der Durchschnittstabelle fehlt nicht, sie wird geschätzt', async () => {
+    const r = recipe([ing('Petersilie', 20, 'g', 'kruid')]);
+    const n = await nutritionForRecipe(r, fakeProvider());
+    assert.equal(n.missing.length, 0);
+    assert.deepEqual(n.estimated, ['Petersilie']);
   });
 
   it('benennt unrechenbare Mengen', async () => {
@@ -181,12 +192,27 @@ describe('nutritionForRecipe', () => {
   });
 
   it('ein Ausfall der Datenquelle bricht die Rechnung nicht ab', async () => {
+    // Fällt der Händler aus, springt die Durchschnittstabelle ein — die
+    // Rechnung wird ungenauer, aber sie kommt zustande. Das ist der Zweck
+    // des Rückfalls: Ein Netzfehler soll keine leere Anzeige erzeugen.
     const provider = fakeProvider({
       async getNutrition() {
         throw new Error('Netz weg');
       },
     });
     const n = await nutritionForRecipe(recipe([ing('Hackfleisch', 500, 'g', 'gehakt')]), provider);
+    assert.equal(n.covered, 1);
+    assert.deepEqual(n.estimated, ['Hackfleisch']);
+    assert.equal(n.missing.length, 0);
+  });
+
+  it('fällt der Händler aus UND kennt die Tabelle nichts, bleibt es ehrlich leer', async () => {
+    const provider = fakeProvider({
+      async getNutrition() {
+        throw new Error('Netz weg');
+      },
+    });
+    const n = await nutritionForRecipe(recipe([ing('Wunderpulver', 50, 'g', 'x')]), provider);
     assert.equal(n.covered, 0);
     assert.equal(n.missing[0].reason, 'keine Nährwerte');
   });
@@ -234,5 +260,66 @@ describe('Ehrlichkeit der Anzeige', () => {
 
   it('ein Rezept ohne Zutaten ist nie belastbar', () => {
     assert.equal(isTrustworthy({ covered: 0, totalIngredients: 0 } as never), false);
+  });
+});
+
+describe('Rückfall auf Durchschnittswerte', () => {
+  it('springt ein, wenn der Händler nichts meldet', async () => {
+    // Gurke: AH liefert für lose Frischware keine Nährwerte. Ohne Rückfall
+    // fiel sie ganz aus der Rechnung und zog die Summe nach unten.
+    const provider = fakeProvider({
+      async getNutrition() {
+        return null;
+      },
+    });
+    const n = await nutritionForRecipe(recipe([ing('Gurke', 400, 'g', 'komkommer')]), provider);
+    assert.equal(n.covered, 1);
+    assert.equal(n.missing.length, 0);
+    assert.deepEqual(n.estimated, ['Gurke'], 'muss als geschätzt gekennzeichnet sein');
+    assert.equal(n.total.kcal, 60, '400 g × 15 kcal/100 g');
+  });
+
+  it('greift auch ohne Produkttreffer', async () => {
+    const provider = fakeProvider({
+      async searchProducts() {
+        return { products: [], totalResults: 0 };
+      },
+    });
+    const n = await nutritionForRecipe(recipe([ing('Mehl', 200, 'g')]), provider);
+    assert.equal(n.covered, 1);
+    assert.deepEqual(n.estimated, ['Mehl']);
+  });
+
+  it('Herstellerangabe schlägt Durchschnittswert', async () => {
+    const n = await nutritionForRecipe(
+      recipe([ing('Hackfleisch', 100, 'g', 'gehakt')]),
+      fakeProvider(),
+    );
+    assert.deepEqual(n.estimated, [], 'nichts geschätzt');
+    assert.equal(n.total.kcal, 196, 'der Wert der Attrappe, nicht der Tabellenwert 241');
+  });
+
+  it('unbekannte Zutat bleibt unbekannt statt geraten zu werden', async () => {
+    const provider = fakeProvider({
+      async getNutrition() {
+        return null;
+      },
+    });
+    const n = await nutritionForRecipe(recipe([ing('Wunderpulver', 50, 'g', 'x')]), provider);
+    assert.equal(n.covered, 0);
+    assert.equal(n.missing[0].reason, 'keine Nährwerte');
+  });
+
+  it('rechnet Löffelmengen über die Dichte', async () => {
+    // 1 TL Paprikapulver = 5 ml × 0,45 g/ml = 2,25 g. Ohne Dichtetabelle
+    // fiel jede Gewürzzeile aus der Rechnung.
+    const provider = fakeProvider({
+      async getNutrition() {
+        return null;
+      },
+    });
+    const n = await nutritionForRecipe(recipe([ing('Paprikapulver', 1, 'TL')]), provider);
+    assert.equal(n.covered, 1);
+    assert.ok((n.total.kcal ?? 0) > 0);
   });
 });

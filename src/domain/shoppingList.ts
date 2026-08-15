@@ -7,14 +7,24 @@
  */
 
 import type { PriceProvider } from '../supermarkets/types';
+import { deductFromPantry, type PantryItem } from './pantry';
 import { isPantryStaple, normalizeKey, refreshSearchTerm } from './translate';
 import type { Ingredient, Product, Recipe, ShoppingList, ShoppingListItem } from './types';
 import { calculateTotal, packagesNeeded } from './types';
-import { toBase, toBaseForIngredient, type BaseQuantity, type Unit } from './units';
+import { toBase, toBaseForIngredient, type BaseQuantity, type Quantity, type Unit } from './units';
 
 export interface BuildOptions {
   /** Vorratsware (Salz, Öl …) mit auf die Liste nehmen. Standard: nein. */
   includePantryStaples?: boolean;
+  /**
+   * Was zu Hause steht. Wird von den benötigten Mengen abgezogen, bevor
+   * gesucht wird.
+   *
+   * Nicht zu verwechseln mit `includePantryStaples`: Das eine ist die
+   * Annahme „Salz hat man üblicherweise", das hier die Angabe „ich habe
+   * genau 240 g Reis".
+   */
+  pantry?: PantryItem[];
   /**
    * Wie viele Produktkandidaten je Zutat geprüft werden.
    *
@@ -325,11 +335,46 @@ export async function buildShoppingList(
   provider: PriceProvider,
   options: BuildOptions = {},
 ): Promise<ShoppingList> {
-  const { includePantryStaples = false, candidatesPerIngredient = 24, onProgress } = options;
+  const {
+    includePantryStaples = false,
+    candidatesPerIngredient = 24,
+    onProgress,
+    pantry = [],
+  } = options;
 
-  const merged = mergeIngredients(recipes).filter(
+  const alle = mergeIngredients(recipes).filter(
     (ing) => includePantryStaples || !(ing.isPantryStaple || isPantryStaple(ing.name)),
   );
+
+  /**
+   * Vorrat abziehen, bevor gesucht wird.
+   *
+   * Was vollständig zu Hause ist, fällt ganz von der Liste — es hätte dort
+   * nur einen Preis, den man nicht zahlt. Was teilweise da ist, bleibt mit
+   * verringerter Menge stehen, damit die Packungsrechnung stimmt: Wer 800 g
+   * Mehl hat und 1 kg braucht, kauft eine 500-g-Packung, keine 1-kg.
+   *
+   * Die vollständig gedeckten Zutaten werden gemerkt, damit die Oberfläche
+   * sagen kann, *warum* sie nicht dastehen. Eine Zutat, die kommentarlos
+   * fehlt, wirkt wie ein Fehler.
+   */
+  const coveredByPantry: { name: string; quantity: Quantity }[] = [];
+  const merged: Ingredient[] = [];
+
+  for (const ing of alle) {
+    if (pantry.length === 0) {
+      merged.push(ing);
+      continue;
+    }
+    const abzug = deductFromPantry(ing, pantry);
+    if (abzug.fullyCovered) {
+      coveredByPantry.push({ name: ing.name, quantity: ing.quantity });
+      continue;
+    }
+    merged.push(
+      abzug.covered > 0 ? { ...ing, quantity: abzug.remaining, fromPantry: abzug.covered } : ing,
+    );
+  }
 
   let done = 0;
   // Drei parallele Anfragen: schnell genug für ein Rezept, ohne die
@@ -420,5 +465,6 @@ export async function buildShoppingList(
     provider: provider.id,
     total: calculateTotal(items),
     createdAt: new Date().toISOString(),
+    coveredByPantry,
   };
 }

@@ -153,6 +153,49 @@ export function toBaseForIngredient(
 }
 
 /**
+ * Dichte in Gramm je Milliliter — für Zutaten, die in Löffeln gemessen,
+ * aber in Gramm ausgewiesen werden.
+ *
+ * EL und TL sind hier als Volumen geführt (15 ml / 5 ml), das ist die
+ * übliche Konvention. Nährwerttabellen rechnen dagegen je 100 **Gramm**.
+ * Ohne Dichte fällt „1 TL Paprikapulver" damit aus jeder Nährwertrechnung,
+ * obwohl beides bekannt ist.
+ *
+ * Die Werte sind Schüttdichten, keine Stoffdichten: Ein Esslöffel Mehl wiegt
+ * etwa 9 g, nicht 15 — Mehl ist locker. Genau deshalb steht hier eine
+ * eigene Tabelle statt eines Umrechnungsfaktors.
+ */
+export const INGREDIENT_DENSITY: Record<string, number> = {
+  mehl: 0.6,
+  weizenmehl: 0.6,
+  dinkelmehl: 0.6,
+  staerke: 0.6,
+  zucker: 0.8,
+  puderzucker: 0.55,
+  salz: 1.2,
+  pfeffer: 0.45,
+  paprikapulver: 0.45,
+  zimt: 0.45,
+  muskat: 0.5,
+  oregano: 0.2,
+  thymian: 0.2,
+  currypulver: 0.45,
+  backpulver: 0.9,
+  haferflocken: 0.4,
+  semmelbroesel: 0.4,
+  reis: 0.85,
+  honig: 1.4,
+  tomatenmark: 1.1,
+  senf: 1.05,
+  // Öl und Essig liegen nah an Wasser — trotzdem eintragen, damit „2 EL Öl"
+  // rechenbar wird, ohne dass jemand 1,0 raten muss.
+  oel: 0.92,
+  olivenoel: 0.92,
+  sonnenblumenoel: 0.92,
+  essig: 1.01,
+};
+
+/**
  * Wie `toBaseForIngredient`, rechnet aber **Stückmengen zusätzlich in Gramm** um.
  *
  * Der Unterschied ist wichtig genug für eine eigene Funktion:
@@ -168,7 +211,17 @@ export function toBaseForIngredient(
  */
 export function toMassForIngredient(q: Quantity, ingredientId: string): BaseQuantity | null {
   const base = toBaseForIngredient(q, ingredientId);
-  if (base && base.dimension !== 'count') return base;
+
+  if (base?.dimension === 'mass') return base;
+
+  // Volumen in Masse, wenn die Dichte bekannt ist: „1 TL Paprikapulver"
+  // sind 5 ml mal 0,45 g/ml, also 2,25 g. Ist sie unbekannt, bleibt es
+  // Volumen — Wasser und Milch will man nicht in Gramm sehen.
+  if (base?.dimension === 'volume') {
+    const dichte = INGREDIENT_DENSITY[ingredientId];
+    if (dichte === undefined) return base;
+    return { amount: base.amount * dichte, dimension: 'mass' };
+  }
 
   const grams = AMBIGUOUS_WEIGHTS[ingredientId]?.[q.unit];
   if (grams === undefined) return null;

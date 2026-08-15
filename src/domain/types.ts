@@ -44,6 +44,12 @@ export interface Ingredient {
   searchTermNl?: string;
   quantity: Quantity;
   rawText: string;
+  /**
+   * Wie viel dieser Menge aus dem Vorrat kam, in der Einheit der Zutat.
+   * Nur gesetzt, wenn teilweise gedeckt — die Zeile zeigt dann, warum die
+   * Kaufmenge kleiner ist als im Rezept.
+   */
+  fromPantry?: number;
   /** Vorratsware (Salz, Pfeffer, Öl): standardmäßig nicht auf der Einkaufsliste. */
   isPantryStaple: boolean;
   /**
@@ -135,6 +141,14 @@ export interface ShoppingList {
   id: string;
   recipes: Recipe[];
   items: ShoppingListItem[];
+  /**
+   * Zutaten, die vollständig aus dem Vorrat gedeckt sind und deshalb gar
+   * nicht auf der Liste stehen.
+   *
+   * Sie gehören trotzdem ins Ergebnis: Eine Zutat, die kommentarlos fehlt,
+   * wirkt wie ein Fehler. „Mehl — hast du schon" ist eine Antwort.
+   */
+  coveredByPantry?: { name: string; quantity: Quantity }[];
   provider: string;
   /**
    * Gesamtsumme in Euro. Bezieht sich auf die gekauften Packungen,

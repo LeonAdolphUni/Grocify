@@ -16,6 +16,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
+import type { PantryItem } from '../src/domain/pantry';
 import type { Ingredient, Recipe } from '../src/domain/types';
 import type { Unit } from '../src/domain/units';
 import { emptyWeek, WEEKDAYS, type WeekPlan, type Weekday } from '../src/domain/weekPlan';
@@ -70,6 +71,18 @@ CREATE TABLE IF NOT EXISTS week_plan_entries (
 );
 
 CREATE INDEX IF NOT EXISTS idx_entries_plan ON week_plan_entries(plan_id);
+
+-- Was zu Hause steht. Keine Fremdschluessel: Der Vorrat haengt an keinem
+-- Rezept, er ueberlebt jedes. "240 g Reis" bleibt wahr, auch wenn das
+-- Rezept geloescht wird, aus dem der Rest stammte.
+CREATE TABLE IF NOT EXISTS pantry (
+  id         TEXT PRIMARY KEY,
+  name       TEXT    NOT NULL,
+  amount     REAL    NOT NULL,
+  unit       TEXT    NOT NULL,
+  note       TEXT,
+  updated_at TEXT    NOT NULL
+);
 `;
 
 /** Es gibt genau einen Wochenplan — mehr braucht eine Ein-Personen-App nicht. */
@@ -272,13 +285,80 @@ export class GrocifyDb {
     return this.getWeekPlan();
   }
 
+  // ── Vorrat ────────────────────────────────────────────────────────
+
+  listPantry(): PantryItem[] {
+    const rows = this.db
+      .prepare('SELECT id, name, amount, unit, note, updated_at FROM pantry ORDER BY name COLLATE NOCASE')
+      .all() as {
+      id: string;
+      name: string;
+      amount: number;
+      unit: string;
+      note: string | null;
+      updated_at: string;
+    }[];
+
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      quantity: { amount: r.amount, unit: r.unit as Unit },
+      note: r.note ?? undefined,
+      updatedAt: r.updated_at,
+    }));
+  }
+
+  /** Legt an oder überschreibt nach ID. */
+  savePantryItem(item: PantryItem): PantryItem {
+    this.db
+      .prepare(
+        `INSERT INTO pantry (id, name, amount, unit, note, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           amount = excluded.amount,
+           unit = excluded.unit,
+           note = excluded.note,
+           updated_at = excluded.updated_at`,
+      )
+      .run(
+        item.id,
+        item.name,
+        item.quantity.amount,
+        item.quantity.unit,
+        item.note ?? null,
+        item.updatedAt || new Date().toISOString(),
+      );
+
+    return this.listPantry().find((p) => p.id === item.id)!;
+  }
+
+  deletePantryItem(id: string): boolean {
+    return this.db.prepare('DELETE FROM pantry WHERE id = ?').run(id).changes > 0;
+  }
+
+  /** Ersetzt den ganzen Vorrat — für das Zurückholen einer Sicherung. */
+  replacePantry(items: PantryItem[]): PantryItem[] {
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('DELETE FROM pantry').run();
+      for (const item of items) this.savePantryItem(item);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+    return this.listPantry();
+  }
+
   /** Kennzahlen für den Gesundheitscheck. */
-  stats(): { recipes: number; ingredients: number; plannedMeals: number } {
+  stats(): { recipes: number; ingredients: number; plannedMeals: number; pantry: number } {
     const count = (sql: string) => (this.db.prepare(sql).get() as { n: number }).n;
     return {
       recipes: count('SELECT COUNT(*) AS n FROM recipes'),
       ingredients: count('SELECT COUNT(*) AS n FROM ingredients'),
       plannedMeals: count('SELECT COUNT(*) AS n FROM week_plan_entries'),
+      pantry: count('SELECT COUNT(*) AS n FROM pantry'),
     };
   }
 }

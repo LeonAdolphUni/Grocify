@@ -12,6 +12,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { StatusBar } from 'expo-status-bar';
 
 import { ApiError, api } from './src/api/client';
+import type { PantryItem } from './src/domain/pantry';
 import type { Recipe } from './src/domain/types';
 import {
   emptyWeek,
@@ -23,6 +24,7 @@ import {
 } from './src/domain/weekPlan';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { ImportScreen } from './src/screens/ImportScreen';
+import { PantryScreen } from './src/screens/PantryScreen';
 import { RecipeDetailScreen } from './src/screens/RecipeDetailScreen';
 import { RecipeEditScreen } from './src/screens/RecipeEditScreen';
 import { RecipeListScreen } from './src/screens/RecipeListScreen';
@@ -39,6 +41,7 @@ type Route =
   | { name: 'week' }
   | { name: 'recipes' }
   | { name: 'import' }
+  | { name: 'pantry' }
   | { name: 'recipe'; recipeId: string }
   | { name: 'edit'; recipeId?: string }
   | { name: 'supermarket'; source: Recipe[] }
@@ -47,6 +50,7 @@ type Route =
 export default function App() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [plan, setPlan] = useState<WeekPlan>(() => emptyWeek('week-1'));
+  const [pantry, setPantry] = useState<PantryItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [loading, setLoading] = useState(true);
@@ -60,12 +64,14 @@ export default function App() {
     setLoading(true);
     setFatal(null);
     try {
-      const [loadedRecipes, loadedPlan] = await Promise.all([
+      const [loadedRecipes, loadedPlan, loadedPantry] = await Promise.all([
         api.listRecipes(),
         api.getWeekPlan(),
+        api.listPantry(),
       ]);
       setRecipes(loadedRecipes);
       setPlan(loadedPlan);
+      setPantry(loadedPantry);
     } catch (err) {
       setFatal(
         err instanceof ApiError
@@ -144,6 +150,46 @@ export default function App() {
       action: { label: 'Rückgängig', run: () => updatePlan(vorher) },
     });
   }, [plan, recipes, updatePlan]);
+
+  const savePantryItem = useCallback(async (item: PantryItem) => {
+    try {
+      await api.savePantryItem(item);
+      setPantry(await api.listPantry());
+      setToast({ text: `„${item.name}" im Vorrat` });
+    } catch (err) {
+      setFatal(err instanceof ApiError ? err.message : (err as Error).message);
+    }
+  }, []);
+
+  /**
+   * „Aufgebraucht" statt „löschen": Der Eintrag verschwindet, weil die Ware
+   * weg ist — nicht, weil man sich vertippt hat. Rückgängig gibt es
+   * trotzdem, denn beides sieht beim Antippen gleich aus.
+   */
+  const deletePantryItem = useCallback(
+    async (id: string) => {
+      const weg = pantry.find((p) => p.id === id);
+      try {
+        await api.deletePantryItem(id);
+        setPantry(await api.listPantry());
+        if (weg) {
+          setToast({
+            text: `„${weg.name}" aufgebraucht`,
+            action: {
+              label: 'Rückgängig',
+              run: async () => {
+                await api.savePantryItem(weg);
+                setPantry(await api.listPantry());
+              },
+            },
+          });
+        }
+      } catch (err) {
+        setFatal(err instanceof ApiError ? err.message : (err as Error).message);
+      }
+    },
+    [pantry],
+  );
 
   const handleSave = useCallback(
     async (recipe: Recipe) => {
@@ -262,6 +308,8 @@ export default function App() {
           recipes={recipes}
           onOpenWeek={() => setRoute({ name: 'week' })}
           onOpenRecipes={() => setRoute({ name: 'recipes' })}
+          onOpenPantry={() => setRoute({ name: 'pantry' })}
+          pantryCount={pantry.length}
         />
       )}
 
@@ -319,6 +367,15 @@ export default function App() {
           );
         })()}
 
+      {route.name === 'pantry' && (
+        <PantryScreen
+          pantry={pantry}
+          onSave={savePantryItem}
+          onDelete={deletePantryItem}
+          onBack={() => setRoute({ name: 'home' })}
+        />
+      )}
+
       {route.name === 'edit' && (
         <RecipeEditScreen
           recipe={recipes.find((r) => r.id === route.recipeId)}
@@ -339,6 +396,7 @@ export default function App() {
         <ShoppingListScreen
           recipes={route.source}
           allRecipes={recipes}
+          pantry={pantry}
           providerId={route.providerId}
           onBack={() => setRoute({ name: 'home' })}
         />

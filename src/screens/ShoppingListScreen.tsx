@@ -27,6 +27,7 @@ import {
 } from 'react-native';
 
 import { suggestRecipesForLeftovers } from '../domain/leftoverUse';
+import type { PantryItem } from '../domain/pantry';
 import { buildShoppingList } from '../domain/shoppingList';
 import { calculateStats, calculateTotal, type Product, type Recipe, type ShoppingList, type ShoppingListItem } from '../domain/types';
 import { formatQuantity } from '../domain/units';
@@ -44,6 +45,8 @@ interface Props {
   recipes: Recipe[];
   /** Alle bekannten Rezepte — Grundlage für die Restverwertungs-Vorschläge. */
   allRecipes: Recipe[];
+  /** Was zu Hause steht — wird von den Mengen abgezogen. */
+  pantry?: PantryItem[];
   providerId: string;
   onBack: () => void;
 }
@@ -80,7 +83,7 @@ function groupByCategory(
 }
 
 
-export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: Props) {
+export function ShoppingListScreen({ recipes, allRecipes, pantry, providerId, onBack }: Props) {
   const [list, setList] = useState<ShoppingList | null>(null);
   const [progress, setProgress] = useState({ done: 0, total: 0, label: '' });
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +114,7 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
     (async () => {
       try {
         const result = await buildShoppingList(recipes, provider, {
+          pantry,
           onProgress: (done, total, label) => {
             if (!cancelled) setProgress({ done, total, label });
           },
@@ -124,7 +128,7 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
     return () => {
       cancelled = true;
     };
-  }, [recipes, provider, providerId]);
+  }, [recipes, provider, providerId, pantry]);
 
   /** Zählt hoch bei jedem Abhaken — löst den Sprung der Blüte aus. */
   const [tick, setTick] = useState(0);
@@ -278,6 +282,15 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
         }
       />
 
+      {/* Eine Zutat, die kommentarlos fehlt, wirkt wie ein Fehler. Hier
+          steht, dass sie fehlt, weil sie schon da ist. */}
+      {!shopping && list.coveredByPantry && list.coveredByPantry.length > 0 ? (
+        <Notice tone="info">
+          🥫 Aus dem Vorrat gedeckt, nicht auf der Liste:{' '}
+          {list.coveredByPantry.map((c) => `${c.name} (${formatQuantity(c.quantity)})`).join(', ')}
+        </Notice>
+      ) : null}
+
       {stats.unmatched > 0 ? (
         <Notice tone="warn">
           {stats.unmatched} {stats.unmatched === 1 ? 'Zutat konnte' : 'Zutaten konnten'} keinem
@@ -353,6 +366,14 @@ export function ShoppingListScreen({ recipes, allRecipes, providerId, onBack }: 
                             : ''}
                         </Text>
                       </View>
+                    ) : null}
+
+                    {/* Teilweise aus dem Vorrat: Ohne diesen Hinweis wirkt
+                        die kleinere Kaufmenge wie ein Rechenfehler. */}
+                    {entry.ingredient.fromPantry ? (
+                      <Text style={s.fromPantry}>
+                        🥫 {entry.ingredient.fromPantry} aus dem Vorrat abgezogen
+                      </Text>
                     ) : null}
 
                     {!shopping && entry.note ? <Text style={s.itemNote}>{entry.note}</Text> : null}
@@ -562,6 +583,7 @@ const s = StyleSheet.create({
   itemMetaBig: { fontSize: 14, marginTop: 4 },
   priceBig: { fontSize: 18 },
   swapHit: { minHeight: 32, justifyContent: 'center' },
+  fromPantry: { fontSize: 11, color: colors.seed, marginTop: 3, fontWeight: '600' },
 
   modeBtn: {
     minHeight: 44,
