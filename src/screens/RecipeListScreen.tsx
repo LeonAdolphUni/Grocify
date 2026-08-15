@@ -18,6 +18,7 @@ interface Props {
   recipes: Recipe[];
   selectedIds: string[];
   onToggleSelect: (id: string) => void;
+  pantryCount?: number;
   onCreate: () => void;
   onImport: () => void;
   onOpen: (id: string) => void;
@@ -31,6 +32,7 @@ export function RecipeListScreen({
   recipes,
   selectedIds,
   onToggleSelect,
+  pantryCount = 0,
   onCreate,
   onImport,
   onOpen,
@@ -49,7 +51,9 @@ export function RecipeListScreen({
         subtitle={
           recipes.length === 0
             ? 'Noch keine Rezepte'
-            : `${recipes.length} gespeichert${selectedCount > 0 ? ` · ${selectedCount} ausgewählt` : ''}`
+            : selectedCount > 0
+              ? `${selectedCount} von ${recipes.length} ausgewählt`
+              : `${recipes.length} gespeichert · antippen, um einzeln einzukaufen`
         }
         onBack={onBack}
         right={
@@ -196,6 +200,12 @@ const s = StyleSheet.create({
   emptyText: { fontSize: 14, color: colors.textFaint, textAlign: 'center', lineHeight: 21 },
   emptyAction: { marginTop: spacing.xxl, alignSelf: 'stretch', gap: spacing.sm },
   emptyHint: { fontSize: 12, color: colors.textFaint, textAlign: 'center', lineHeight: 17 },
+  footerHint: {
+    fontSize: 11,
+    color: colors.textFaint,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
   footer: {
     padding: spacing.lg,
     borderTopWidth: 1,

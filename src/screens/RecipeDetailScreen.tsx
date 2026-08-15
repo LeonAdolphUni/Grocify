@@ -21,7 +21,8 @@ import { getProvider, SEARCH_PROVIDER_ID } from '../supermarkets/registry';
 import { Kees } from '../ui/Kees';
 import { NutritionPanel, NutritionSkeleton } from '../ui/NutritionPanel';
 import { Button, Header, Screen } from '../ui/components';
-import { colors, fonts, radius, recipeIcon, spacing } from '../ui/theme';
+import { Monogram } from '../ui/Monogram';
+import { colors, fonts, radius, spacing } from '../ui/theme';
 
 interface Props {
   recipe: Recipe;
@@ -68,14 +69,14 @@ export function RecipeDetailScreen({ recipe, providerId, onEdit, onBack }: Props
 
       <ScrollView contentContainerStyle={s.body}>
         <View style={s.hero}>
-          <Text style={s.heroIcon}>{recipeIcon(recipe.title)}</Text>
+          <Monogram title={recipe.title} size={64} />
 
           {/* Stille Umrechnung wäre ein Vertrauensbruch: Wer „500 g
               Hackfleisch" im Original kennt und hier „125 g" liest, muss
               erfahren warum. */}
           {scalingLabel(recipe) ? (
             <View style={s.scaledBadge}>
-              <Text style={s.scaledText}>⤵ {scalingLabel(recipe)}</Text>
+              <Text style={s.scaledText}>{scalingLabel(recipe)}</Text>
             </View>
           ) : null}
 

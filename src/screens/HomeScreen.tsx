@@ -22,7 +22,8 @@ import { BookIcon, CalendarIcon, ChevronIcon, JarIcon } from '../ui/icons';
 import { Kees, type Mood } from '../ui/Kees';
 import { Sunflower } from '../ui/Sunflower';
 import { Screen } from '../ui/components';
-import { colors, fonts, radius, recipeIcon, spacing } from '../ui/theme';
+import { Monogram } from '../ui/Monogram';
+import { colors, fonts, radius, spacing } from '../ui/theme';
 
 interface Props {
   plan: WeekPlan;
@@ -30,7 +31,10 @@ interface Props {
   onOpenWeek: () => void;
   onOpenRecipes: () => void;
   onOpenPantry: () => void;
+  onOpenPlanner: () => void;
   pantryCount: number;
+  pantryReviewDue: boolean;
+  onPantryReviewed: () => void;
   servingsPerMeal: number;
   onChangeServings: (n: number) => void;
 }
@@ -68,7 +72,10 @@ export function HomeScreen({
   onOpenWeek,
   onOpenRecipes,
   onOpenPantry,
+  onOpenPlanner,
   pantryCount,
+  pantryReviewDue,
+  onPantryReviewed,
   servingsPerMeal,
   onChangeServings,
 }: Props) {
@@ -112,6 +119,50 @@ export function HomeScreen({
           <Text style={s.keesText}>{status.text}</Text>
         </View>
 
+        {/* Wöchentliche Vorratserinnerung. Sie kommt am Montag, weil dann
+            die Woche geplant wird — am Sonntagabend würde sie nur stören.
+            Und sie lässt sich wegdrücken, ohne den Vorrat zu öffnen: Wer
+            gerade nachgesehen hat, soll nicht dorthin gezwungen werden. */}
+        {pantryReviewDue ? (
+          <View style={s.reminder}>
+            <View style={s.reminderBody}>
+              <Text style={s.reminderTitle}>Neue Woche — stimmt dein Vorrat noch?</Text>
+              <Text style={s.reminderText}>
+                {pantryCount === 0
+                  ? 'Noch nichts eingetragen. Was zu Hause steht, wird vom Einkauf abgezogen.'
+                  : `${pantryCount} ${pantryCount === 1 ? 'Eintrag' : 'Einträge'} — was ist aufgebraucht, was ist dazugekommen?`}
+              </Text>
+            </View>
+            <View style={s.reminderActions}>
+              <Pressable
+                onPress={onOpenPantry}
+                style={({ pressed }) => [s.reminderBtn, pressed && s.pressed]}
+              >
+                <Text style={s.reminderBtnText}>Durchsehen</Text>
+              </Pressable>
+              <Pressable onPress={onPantryReviewed} hitSlop={8} style={s.reminderDismiss}>
+                <Text style={s.reminderDismissText}>Passt schon</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Der Helfer sitzt vor den beiden Wegen: Wer nicht weiß, was er
+            kochen will, soll nicht erst durch den leeren Wochenplan. */}
+        <Pressable
+          onPress={onOpenPlanner}
+          style={({ pressed }) => [s.plannerTile, pressed && s.pressed]}
+        >
+          <View style={s.plannerBody}>
+            <Text style={s.plannerTitle}>Woche planen lassen</Text>
+            <Text style={s.plannerSub}>
+              Sag, worauf du Lust hast — der Helfer sucht Gerichte, die sich Zutaten
+              teilen und deinen Vorrat nutzen
+            </Text>
+          </View>
+          <ChevronIcon size={18} color={colors.onDark} />
+        </Pressable>
+
         {/* ── Die zwei Wege ── */}
         <Pressable
           onPress={onOpenWeek}
@@ -133,9 +184,7 @@ export function HomeScreen({
           {upcoming.length > 0 ? (
             <View style={s.preview}>
               {upcoming.map((r, i) => (
-                <Text key={`${r.id}-${i}`} style={s.previewIcon}>
-                  {recipeIcon(r.title)}
-                </Text>
+                <Monogram key={`${r.id}-${i}`} title={r.title} size={26} />
               ))}
             </View>
           ) : null}
@@ -214,7 +263,7 @@ export function HomeScreen({
 
         {servingsPerMeal === 1 ? (
           <Text style={s.servingsNote}>
-            ⚠️ Packungen lassen sich nicht vierteln. Gemessen an einer echten
+            Packungen lassen sich nicht vierteln. Gemessen an einer echten
             Woche: bei 1 Portion werden nur 40 % des Eingekauften verkocht, bei
             2 Portionen schon 63 % — für 70 Cent mehr im Einkauf. Wer zweimal
             kocht und zweimal isst, zahlt je Portion die Hälfte.
@@ -296,6 +345,41 @@ const s = StyleSheet.create({
 
   preview: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   previewIcon: { fontSize: 22 },
+
+  reminder: {
+    backgroundColor: colors.sunSoft,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.sun,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  reminderBody: { gap: 3 },
+  reminderTitle: { fontFamily: fonts.heading, fontSize: 15, fontWeight: '700', color: '#3a2a00' },
+  reminderText: { fontSize: 12.5, color: colors.seed, lineHeight: 18 },
+  reminderActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  reminderBtn: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+  },
+  reminderBtnText: { fontFamily: fonts.heading, fontSize: 13, fontWeight: '700', color: colors.onDark },
+  reminderDismiss: { minHeight: 40, justifyContent: 'center' },
+  reminderDismissText: { fontSize: 12.5, color: colors.seed, textDecorationLine: 'underline' },
+
+  plannerTile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.frog,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+  },
+  plannerBody: { flex: 1, gap: 2 },
+  plannerTitle: { fontFamily: fonts.heading, fontSize: 16, fontWeight: '700', color: colors.onDark },
+  plannerSub: { fontSize: 12, color: 'rgba(244,251,239,0.85)', lineHeight: 17 },
 
   servings: {
     flexDirection: 'row',

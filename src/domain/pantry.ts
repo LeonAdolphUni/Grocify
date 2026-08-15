@@ -193,6 +193,50 @@ export function addToPantry(pantry: PantryItem[], name: string, quantity: Quanti
   return pantry.map((p) => (p.id === key ? { ...p, quantity: zusammen, updatedAt: jetzt } : p));
 }
 
+/**
+ * Bucht den Verbrauch eines Gerichts aus dem Vorrat aus.
+ *
+ * Gebraucht für die Wochenplanung: Wenn Montag die zwei Zwiebeln verkocht,
+ * sind sie Dienstag nicht mehr da. Ohne diese Verrechnung bekämen alle
+ * Gerichte der Woche Punkte für dieselben zwei Zwiebeln, und der Planer
+ * würde behaupten, der Vorrat sei mehrfach gedeckt.
+ *
+ * Gibt den verbleibenden Vorrat zurück; das Original bleibt unverändert.
+ */
+export function consumeFromPantry(
+  pantry: PantryItem[],
+  ingredients: Pick<Ingredient, 'id' | 'name' | 'quantity'>[],
+): PantryItem[] {
+  let rest = pantry;
+
+  for (const ing of ingredients) {
+    rest = rest.flatMap((eintrag) => {
+      const passt =
+        eintrag.id === (ing.id || pantryKey(ing.name)) ||
+        sameIngredientName(eintrag.name, ing.name);
+      if (!passt) return [eintrag];
+
+      const have = toBaseForIngredient(eintrag.quantity, eintrag.id);
+      const need = toBaseForIngredient(ing.quantity, ing.id || pantryKey(ing.name));
+
+      // Nicht vergleichbar? Dann lieber stehen lassen als falsch abbuchen.
+      if (!have || !need || have.dimension !== need.dimension) return [eintrag];
+
+      const uebrig = have.amount - need.amount;
+      if (uebrig <= 0) return []; // aufgebraucht
+
+      return [
+        {
+          ...eintrag,
+          quantity: { amount: Math.round(uebrig * 100) / 100, unit: baseUnit(have.dimension) },
+        },
+      ];
+    });
+  }
+
+  return rest;
+}
+
 /** Entfernt leere Einträge — ein Vorrat mit „0 g Mehl" ist kein Vorrat. */
 export function prunePantry(pantry: PantryItem[]): PantryItem[] {
   return pantry.filter((p) => p.quantity.amount > 0);

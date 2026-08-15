@@ -90,7 +90,7 @@ export function NutritionPanel({ nutrition, compact }: Props) {
             und Wurst streuen die echten Werte deutlich. */}
         {nutrition.estimated.length > 0 ? (
           <Text style={s.footEstimated}>
-            ≈ Geschätzt aus Durchschnittswerten: {nutrition.estimated.join(', ')} — der
+            Geschätzt aus Durchschnittswerten: {nutrition.estimated.join(', ')} — der
             Händler meldet dafür keine Nährwerte.
           </Text>
         ) : null}

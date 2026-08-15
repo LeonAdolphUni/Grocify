@@ -37,7 +37,7 @@ import { Kees, keesSays, moodForUtilization } from '../ui/Kees';
 import { CartIcon, JarIcon } from '../ui/icons';
 import { Hop, SeedBurst, SinkIn } from '../ui/motion';
 import { Petals, Sunflower } from '../ui/Sunflower';
-import { categoryIcon, colors, euro, fonts, radius, spacing } from '../ui/theme';
+import { categoryColor, colors, euro, fonts, radius, spacing } from '../ui/theme';
 import { useWakeLock } from '../ui/useWakeLock';
 import { ProductSearchScreen } from './ProductSearchScreen';
 
@@ -305,9 +305,10 @@ export function ShoppingListScreen({ recipes, allRecipes, pantry, providerId, on
         contentContainerStyle={s.list}
         renderItem={({ item: [category, entries] }) => (
           <View style={s.group}>
-            <Text style={s.groupTitle}>
-              <Text style={s.groupIcon}>{categoryIcon(category)}</Text> {category}
-            </Text>
+            <View style={s.groupHead}>
+              <View style={[s.groupBar, { backgroundColor: categoryColor(category) }]} />
+              <Text style={s.groupTitle}>{category}</Text>
+            </View>
             {entries.map((entry) => {
               const key = itemKey(entry);
               const isChecked = checked.has(key);
@@ -549,6 +550,8 @@ const s = StyleSheet.create({
 
   list: { padding: spacing.lg, gap: spacing.xl },
   group: { gap: spacing.sm },
+  groupHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  groupBar: { width: 4, height: 16, borderRadius: 2 },
   groupTitle: {
     fontSize: 12,
     fontWeight: '700',

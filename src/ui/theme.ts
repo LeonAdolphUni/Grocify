@@ -100,66 +100,74 @@ export const euro = (value: number) =>
   new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
 
 /**
- * Symbol für eine Supermarkt-Abteilung.
+ * Farbe einer Supermarkt-Abteilung.
  *
- * Im Laden findet man „🥕 Groente" schneller als das Wort allein — das
- * Symbol wird vor dem Text erkannt. Die Schlüssel sind Albert Heijns
- * eigene Abteilungsnamen; was nicht passt, bekommt den Einkaufswagen.
+ * Vorher stand hier ein Emoji je Abteilung. Der Gedanke war richtig — im
+ * Laden erkennt man ein Symbol vor dem Wort —, die Umsetzung nicht: Emoji
+ * sehen auf jedem System anders aus und bringen ihre eigene Farbe mit, die
+ * mit der Palette nichts zu tun hat.
+ *
+ * Ein Farbstreifen leistet dasselbe und bleibt Teil des Entwurfs: Man sieht
+ * beim Scrollen, wo eine neue Abteilung anfängt, ohne zu lesen. Die
+ * Zuordnung folgt der Ware, nicht dem Zufall — Grün für Frisches, Rot für
+ * Fleisch, Blau für Gekühltes.
+ *
+ * Die Schlüssel sind Albert Heijns eigene Abteilungsnamen.
  */
-export function categoryIcon(category?: string): string {
-  if (!category) return '🛒';
+export function categoryColor(category?: string): string {
+  if (!category) return colors.textFaint;
   const c = category.toLowerCase();
 
-  if (c.startsWith('groente')) return '🥕';
-  if (c.startsWith('fruit')) return '🍎';
-  if (c.startsWith('vlees')) return '🥩';
-  if (c.startsWith('vis')) return '🐟';
-  if (c.startsWith('kaas')) return '🧀';
-  if (c.startsWith('zuivel')) return '🥛';
-  if (c.startsWith('bakkerij') || c.startsWith('brood')) return '🥖';
-  if (c.startsWith('pasta') || c.includes('rijst')) return '🍝';
-  if (c.startsWith('soepen') || c.includes('kruiden')) return '🫙';
-  if (c.startsWith('ontbijt')) return '🍯';
-  if (c.startsWith('diepvries')) return '🧊';
-  if (c.startsWith('frisdrank') || c.includes('sappen')) return '🥤';
-  if (c.startsWith('bier') || c.includes('wijn')) return '🍷';
-  if (c.startsWith('borrel') || c.includes('chips')) return '🥨';
-  if (c.startsWith('koek') || c.includes('snoep')) return '🍪';
-  if (c.startsWith('maaltijden') || c.includes('salades')) return '🥗';
-  if (c.startsWith('vegetarisch') || c.includes('plantaardig')) return '🌱';
-  if (c.startsWith('baby')) return '🍼';
-  if (c.startsWith('drogisterij') || c.includes('verzorging')) return '🧴';
-  if (c.startsWith('huishouden') || c.includes('schoonmaak')) return '🧽';
-  if (c.startsWith('huisdier')) return '🐾';
-  return '🛒';
+  if (c.startsWith('groente')) return '#5fa83d';        // Gemüse
+  if (c.startsWith('fruit')) return '#e0632b';          // Obst
+  if (c.startsWith('vlees')) return '#b4453a';          // Fleisch
+  if (c.startsWith('vis')) return '#3d7f9c';            // Fisch
+  if (c.startsWith('kaas')) return '#d9a300';           // Käse
+  if (c.startsWith('zuivel')) return '#7aa8c4';         // Molkerei
+  if (c.startsWith('bakkerij') || c.startsWith('brood')) return '#a9793f';
+  if (c.startsWith('pasta') || c.includes('rijst')) return '#c9962f';
+  if (c.startsWith('soepen') || c.includes('kruiden')) return '#6b8f5a';
+  if (c.startsWith('ontbijt')) return '#c08a2e';
+  if (c.startsWith('diepvries')) return '#5b93b5';      // Tiefkühl
+  if (c.startsWith('frisdrank') || c.includes('sappen')) return '#4f9d8b';
+  if (c.startsWith('bier') || c.includes('wijn')) return '#8a4a6b';
+  if (c.startsWith('borrel') || c.includes('chips')) return '#a8763c';
+  if (c.startsWith('koek') || c.includes('snoep')) return '#b06a8a';
+  if (c.startsWith('maaltijden') || c.includes('salades')) return '#6fa356';
+  if (c.startsWith('vegetarisch') || c.includes('plantaardig')) return '#4d9130';
+  if (c.startsWith('baby')) return '#c9a0b8';
+  if (c.startsWith('drogisterij') || c.includes('verzorging')) return '#8f9aa8';
+  if (c.startsWith('huishouden') || c.includes('schoonmaak')) return '#7d8b96';
+  if (c.startsWith('huisdier')) return '#9c8464';
+  return colors.textFaint;
 }
 
 /**
- * Symbol für ein Gericht, geraten aus dem Titel.
+ * Monogramm und Farbe für ein Gericht.
  *
- * Im Wochenplan erkennt man das Gericht am Symbol schneller als am Text.
- * Bewusst grob: Trifft es nicht, steht dort ein Teller — das ist besser
- * als ein falsches Bild, das in die Irre führt.
+ * Ersetzt die Gerichts-Emoji. Ein Teller-Symbol für „Carbonara" und ein
+ * Teller-Symbol für „Gurkensalat" unterscheiden nichts — der erste
+ * Buchstabe in einem farbigen Kreis unterscheidet jedes Gericht von jedem
+ * anderen, und die Farbe bleibt über Sitzungen hinweg dieselbe, weil sie
+ * aus dem Titel gerechnet wird.
  */
-export function recipeIcon(title: string): string {
-  const t = title.toLowerCase();
+export function recipeMonogram(title: string): { letter: string; color: string } {
+  const sauber = title.trim();
+  const letter = (sauber[0] ?? '?').toUpperCase();
 
-  if (/(spaghetti|pasta|nudel|bolognese|lasagne)/.test(t)) return '🍝';
-  if (/(pizza|flammkuchen)/.test(t)) return '🍕';
-  if (/(suppe|soep|eintopf)/.test(t)) return '🍲';
-  if (/(pfannkuchen|crepe|waffel)/.test(t)) return '🥞';
-  if (/(kartoffel|gratin|pommes|aardappel)/.test(t)) return '🥔';
-  if (/(omelett|ei\b|eier|rührei)/.test(t)) return '🍳';
-  if (/(reis|risotto|curry|pfanne)/.test(t)) return '🍚';
-  if (/(salat|salade)/.test(t)) return '🥗';
-  if (/(burger|sandwich|toast)/.test(t)) return '🍔';
-  if (/(fisch|lachs|zalm|garnel)/.test(t)) return '🐟';
-  if (/(huhn|hähnchen|kip|chicken)/.test(t)) return '🍗';
-  if (/(steak|braten|rind|schwein|gehakt|hack)/.test(t)) return '🥩';
-  if (/(brot|brood|brötchen)/.test(t)) return '🥖';
-  if (/(kuchen|torte|dessert|nachtisch)/.test(t)) return '🍰';
-  if (/(gemüse|veggie|vegan|vegetarisch)/.test(t)) return '🥦';
-  if (/(taco|burrito|wrap)/.test(t)) return '🌮';
-  if (/(sushi|asia|wok)/.test(t)) return '🍜';
-  return '🍽️';
+  // Einfacher, stabiler Hash: Derselbe Titel ergibt immer dieselbe Farbe.
+  let hash = 0;
+  for (let i = 0; i < sauber.length; i++) hash = (hash * 31 + sauber.charCodeAt(i)) >>> 0;
+
+  const palette = [
+    colors.primary,
+    colors.frog,
+    '#3d7f9c',
+    '#a9793f',
+    '#8a4a6b',
+    '#c9962f',
+    '#6b8f5a',
+    '#b4453a',
+  ];
+  return { letter, color: palette[hash % palette.length] };
 }

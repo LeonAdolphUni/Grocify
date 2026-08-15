@@ -154,7 +154,11 @@ const ROUTES: Route[] = [
       if (!Number.isFinite(portionen) || portionen < 1 || portionen > 12) {
         throw new HttpError(400, 'servingsPerMeal muss zwischen 1 und 12 liegen');
       }
-      return db.saveSettings({ servingsPerMeal: Math.round(portionen) });
+      return db.saveSettings({
+        servingsPerMeal: Math.round(portionen),
+        pantryReviewedAt:
+          typeof s.pantryReviewedAt === 'string' ? s.pantryReviewedAt : undefined,
+      });
     },
   },
 

@@ -14,7 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ApiError, api } from './src/api/client';
 import type { PantryItem } from './src/domain/pantry';
 import { scaleAll, scaleRecipe } from './src/domain/portions';
-import { DEFAULT_SETTINGS, type Settings } from './src/domain/settings';
+import { DEFAULT_SETTINGS, isPantryReviewDue, type Settings } from './src/domain/settings';
 import type { Recipe } from './src/domain/types';
 import {
   emptyWeek,
@@ -27,6 +27,7 @@ import {
 import { HomeScreen } from './src/screens/HomeScreen';
 import { ImportScreen } from './src/screens/ImportScreen';
 import { PantryScreen } from './src/screens/PantryScreen';
+import { PlannerScreen } from './src/screens/PlannerScreen';
 import { RecipeDetailScreen } from './src/screens/RecipeDetailScreen';
 import { RecipeEditScreen } from './src/screens/RecipeEditScreen';
 import { RecipeListScreen } from './src/screens/RecipeListScreen';
@@ -44,6 +45,7 @@ type Route =
   | { name: 'recipes' }
   | { name: 'import' }
   | { name: 'pantry' }
+  | { name: 'planner' }
   | { name: 'recipe'; recipeId: string }
   | { name: 'edit'; recipeId?: string }
   | { name: 'supermarket'; source: Recipe[] }
@@ -155,6 +157,26 @@ export default function App() {
       action: { label: 'Rückgängig', run: () => updatePlan(vorher) },
     });
   }, [plan, recipes, updatePlan]);
+
+  /**
+   * Ist der Vorrat wieder fällig?
+   *
+   * Ab Montag, wenn seit dem letzten Durchsehen ein neuer Montag angebrochen
+   * ist. Montag, weil dann die Woche geplant wird — die Erinnerung kommt,
+   * wenn sie etwas nützt.
+   */
+  const pantryReviewDue = useMemo(() => isPantryReviewDue(settings), [settings]);
+
+  /** Merkt sich, dass der Vorrat durchgesehen wurde. */
+  const markPantryReviewed = useCallback(async () => {
+    const next: Settings = { ...settings, pantryReviewedAt: new Date().toISOString() };
+    setSettings(next);
+    try {
+      setSettings(await api.saveSettings(next));
+    } catch {
+      // Nicht der Rede wert: Die Erinnerung kommt dann nächste Woche wieder.
+    }
+  }, [settings]);
 
   const savePantryItem = useCallback(async (item: PantryItem) => {
     try {
@@ -357,7 +379,10 @@ export default function App() {
           onOpenWeek={() => setRoute({ name: 'week' })}
           onOpenRecipes={() => setRoute({ name: 'recipes' })}
           onOpenPantry={() => setRoute({ name: 'pantry' })}
+          onOpenPlanner={() => setRoute({ name: 'planner' })}
           pantryCount={pantry.length}
+          pantryReviewDue={pantryReviewDue}
+          onPantryReviewed={markPantryReviewed}
           servingsPerMeal={settings.servingsPerMeal}
           onChangeServings={changeServings}
         />
@@ -380,6 +405,7 @@ export default function App() {
       {route.name === 'recipes' && (
         <RecipeListScreen
           recipes={scaledRecipes}
+          pantryCount={pantry.length}
           selectedIds={selectedIds}
           onToggleSelect={(id) =>
             setSelectedIds((ids) =>
@@ -416,6 +442,24 @@ export default function App() {
             />
           );
         })()}
+
+      {route.name === 'planner' && (
+        <PlannerScreen
+          recipes={scaledRecipes}
+          pantry={pantry}
+          onApply={(vorschlag) => {
+            const vorher = plan;
+            void updatePlan({ ...vorschlag, id: plan.id, name: plan.name });
+            setRoute({ name: 'week' });
+            setToast({
+              text: 'Wochenplan übernommen',
+              action: { label: 'Rückgängig', run: () => updatePlan(vorher) },
+            });
+          }}
+          onManageRecipes={() => setRoute({ name: 'recipes' })}
+          onBack={() => setRoute({ name: 'home' })}
+        />
+      )}
 
       {route.name === 'pantry' && (
         <PantryScreen
