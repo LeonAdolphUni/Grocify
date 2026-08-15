@@ -494,6 +494,7 @@ Tomaten, Kürbisbrötchen statt Kürbis, `AH Tomaten passata gezeefd` statt
 | `backup.test.ts` | 21 | der ganze Kreis: Datenbank → JSON → **andere** Datenbank |
 | `weekAdvisor.test.ts` | 25 | die Filter aus dem Testlauf — und dass „ham" nicht in „champignons" trifft |
 | `allerhande.test.ts` | 14 | Bildadressen in drei Schreibweisen, niederländische Vorratsware |
+| `migration.test.ts` | 5 | dass eine **bestehende** Datenbank das neue Schema übersteht |
 
 Kein Test braucht Netzwerk. `db` und `api` bekommen je eine Wegwerf-Datenbank
 im temporären Ordner, `api` einen freien Port über `listen(0)`, und `allerhande`
