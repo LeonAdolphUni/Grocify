@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grocify — Rezept rein, Einkaufsliste raus</title>
+<meta name="description" content="Wochenplan, Rezepte und eine Einkaufsliste mit echten Preisen aus dem niederländischen Supermarktsortiment. 40,17 € für sieben Abende, 85 % verwertet.">
+<meta name="theme-color" content="#eff6ec">
+<link rel="icon" href="../assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<span id="top-sentinel" aria-hidden="true"></span>
+
+<a class="skip" href="#hauptinhalt">Zum Inhalt springen</a>
+
+<header class="nav" data-scrolled="false">
+  <a class="nav__brand" href="#hauptinhalt">
+    <svg class="nav__mark" viewBox="0 0 112 112" aria-hidden="true" focusable="false">
+      <g class="mark__petals"></g>
+      <circle cx="56" cy="56" r="23" fill="var(--seed)"></circle>
+      <circle cx="56" cy="56" r="17" fill="var(--seed-dark)"></circle>
+    </svg>
+    <span>Grocify</span>
+  </a>
+
+  <nav class="nav__links" aria-label="Seitenbereiche">
+    <a class="nav__link" href="#ablauf">So läuft's</a>
+    <a class="nav__link" href="#zahlen">Zahlen</a>
+    <a class="nav__link" href="#koennen">Was drin ist</a>
+    <a class="nav__link" href="#ehrlich">Ehrlich gesagt</a>
+  </nav>
+
+  <a class="btn btn--sun nav__cta" href="#ablauf">Loslegen</a>
+</header>
+
+<main id="hauptinhalt">
+
+  <!-- ══ HERO ══════════════════════════════════════════════════════ -->
+  <section class="hero">
+    <div class="pondlight" aria-hidden="true"></div>
+
+    <div class="container hero__grid">
+      <div class="hero__copy">
+        <p class="eyebrow"><span>Meal-Planning für genau eine Person</span></p>
+
+        <h1 class="hero__title">
+          <span>Rezept rein.</span>
+          <span><em>Einkaufsliste</em></span>
+          <span>raus.</span>
+        </h1>
+
+        <p class="lead">
+          Plane deine Woche, und Grocify sucht zu jeder Zutat das passende Produkt
+          bei Albert&nbsp;Heijn — mit dem Preis, der heute im Regal steht. Am Ende
+          steht da, was der Einkauf kostet. Nicht ungefähr. Genau.
+        </p>
+
+        <div class="hero__actions">
+          <a class="btn btn--sun" href="#ablauf">So funktioniert's</a>
+          <a class="btn btn--ghost" href="#ehrlich">Was es nicht kann</a>
+        </div>
+
+        <p class="note">
+          <svg class="note__arrow" viewBox="0 0 40 30" aria-hidden="true" focusable="false">
+            <path d="M2 4 C14 2 26 8 32 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M26 19 L33 22 L31 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          gemessen, nicht geschätzt
+        </p>
+      </div>
+
+      <div class="hero__art">
+        <svg class="sunflower sunflower--ambient" viewBox="0 0 112 112" role="img"
+             aria-label="Sonnenblume mit zwölf Blättern, elf davon gelb — 85 Prozent Verwertung">
+          <g class="sunflower__petals"></g>
+          <circle cx="56" cy="56" r="23" fill="var(--seed)"></circle>
+          <circle cx="56" cy="56" r="17" fill="var(--seed-dark)"></circle>
+          <text class="sunflower__label" x="56" y="62" text-anchor="middle">85%</text>
+        </svg>
+
+        <div class="kees" id="kees">
+          <div class="kees__bubble" id="kees-bubble" role="status">Kwak! Sauber geplant.</div>
+          <!-- Geometrie 1:1 aus src/ui/Kees.tsx -->
+          <svg class="kees__svg" viewBox="0 0 66 58" role="img" aria-label="Kees, der Frosch">
+            <ellipse cx="33" cy="54" rx="21" ry="4" fill="var(--border)"></ellipse>
+            <ellipse cx="33" cy="36" rx="22" ry="17" fill="var(--frog)"></ellipse>
+            <ellipse cx="33" cy="42" rx="14" ry="9" fill="var(--frog-belly)"></ellipse>
+            <ellipse cx="9"  cy="44" rx="7" ry="4" fill="var(--frog-dark)" transform="rotate(-18 9 44)"></ellipse>
+            <ellipse cx="57" cy="44" rx="7" ry="4" fill="var(--frog-dark)" transform="rotate(18 57 44)"></ellipse>
+            <circle cx="21" cy="19" r="10" fill="var(--frog)"></circle>
+            <circle cx="45" cy="19" r="10" fill="var(--frog)"></circle>
+            <g class="kees__eyes">
+              <circle cx="21" cy="18" r="6" fill="var(--surface)"></circle>
+              <circle cx="45" cy="18" r="6" fill="var(--surface)"></circle>
+              <circle cx="21" cy="18" r="3.2" fill="var(--text)"></circle>
+              <circle cx="45" cy="18" r="3.2" fill="var(--text)"></circle>
+            </g>
+            <path d="M24 34 Q33 44 42 34" stroke="var(--text)" stroke-width="2.4" fill="none" stroke-linecap="round"></path>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ BANDEROLE ═════════════════════════════════════════════════ -->
+  <section class="marquee" aria-hidden="true">
+    <div class="marquee__track">
+      <span class="marquee__group">
+        <b>40,17 €</b> für sieben Abende <i>·</i>
+        <b>85 %</b> verwertet <i>·</i>
+        <b>1,43 €</b> je Portion <i>·</i>
+        <b>15,53 €</b> gespart gegenüber sieben Einzeleinkäufen <i>·</i>
+      </span>
+      <span class="marquee__group">
+        <b>40,17 €</b> für sieben Abende <i>·</i>
+        <b>85 %</b> verwertet <i>·</i>
+        <b>1,43 €</b> je Portion <i>·</i>
+        <b>15,53 €</b> gespart gegenüber sieben Einzeleinkäufen <i>·</i>
+      </span>
+    </div>
+  </section>
+  <p class="visually-hidden">
+    Gemessene Werte: 40,17 € für sieben Abende, 85 % Verwertung, 1,43 € je Portion,
+    15,53 € gespart gegenüber sieben Einzeleinkäufen.
+  </p>
+
+  <!-- ══ ABLAUF ════════════════════════════════════════════════════ -->
+  <section class="section" id="ablauf">
+    <div class="container">
+      <p class="eyebrow" data-reveal><span>In drei Schritten</span></p>
+      <h2 class="h2" data-reveal>Vom Rezept zum Kassenbon — bevor du im Laden stehst</h2>
+
+      <ol class="steps">
+        <li class="step card" data-reveal style="--i:0">
+          <span class="step__num">1</span>
+          <svg class="step__icon" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+            <rect x="9" y="6" width="30" height="36" rx="4" fill="var(--surface-alt)" stroke="var(--pond)" stroke-width="2.5"/>
+            <path d="M16 16h16M16 23h16M16 30h9" stroke="var(--pond)" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <h3>Rezepte sammeln</h3>
+          <p>
+            Schreib einfach <code>Milch 0,5 l</code> hin — das Produkt sucht die App
+            selbst. Oder hol dir ein Rezept direkt von Chefkoch ins eigene Buch.
+          </p>
+        </li>
+
+        <li class="step card" data-reveal style="--i:1">
+          <span class="step__num">2</span>
+          <svg class="step__icon" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+            <rect x="6" y="10" width="36" height="30" rx="4" fill="var(--surface-alt)" stroke="var(--pond)" stroke-width="2.5"/>
+            <path d="M6 19h36" stroke="var(--pond)" stroke-width="2.5"/>
+            <path d="M15 6v8M33 6v8" stroke="var(--pond)" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="16" cy="27" r="2.6" fill="var(--accent)"/>
+            <circle cx="24" cy="27" r="2.6" fill="var(--accent)"/>
+            <circle cx="32" cy="27" r="2.6" fill="var(--accent)"/>
+            <circle cx="16" cy="34" r="2.6" fill="var(--accent)"/>
+          </svg>
+          <h3>Woche planen</h3>
+          <p>
+            Leg die Gerichte auf die Tage. Grocify rechnet die Zutaten zusammen —
+            eine Packung Käse für drei Abende statt drei angebrochene.
+          </p>
+        </li>
+
+        <li class="step card" data-reveal style="--i:2">
+          <span class="step__num">3</span>
+          <svg class="step__icon" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+            <path d="M7 11h5l5 20h20l4-14H16" fill="none" stroke="var(--pond)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="20" cy="38" r="3" fill="var(--accent)"/>
+            <circle cx="34" cy="38" r="3" fill="var(--accent)"/>
+          </svg>
+          <h3>Einkaufen gehen</h3>
+          <p>
+            Die Liste steht nach Abteilung sortiert — 🥕 Groente, 🧀 Kaas, 🥛 Zuivel.
+            Mit Packungsgröße, Menge und Gesamtpreis.
+          </p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ══ ZAHLEN ════════════════════════════════════════════════════ -->
+  <section class="section section--pond" id="zahlen">
+    <div class="container">
+      <p class="eyebrow eyebrow--onDark" data-reveal><span>Ein echter Wochenplan, echte Preise</span></p>
+      <h2 class="h2 h2--gradient" data-reveal>Was sieben geplante Abende kosten</h2>
+      <p class="lead lead--onDark" data-reveal>
+        Sieben Gerichte, 28 Portionen, einmal einkaufen. Alle Zahlen stammen aus
+        einem Lauf gegen das echte Sortiment — nicht aus einer Präsentation.
+      </p>
+
+      <div class="stats">
+        <div class="stat" data-reveal style="--i:0">
+          <span class="stat__value" data-count="40.17" data-decimals="2" data-suffix=" €">0,00 €</span>
+          <span class="stat__label">Wocheneinkauf</span>
+        </div>
+        <div class="stat" data-reveal style="--i:1">
+          <span class="stat__value" data-count="85" data-decimals="0" data-suffix=" %">0 %</span>
+          <span class="stat__label">verwertet</span>
+        </div>
+        <div class="stat" data-reveal style="--i:2">
+          <span class="stat__value" data-count="1.43" data-decimals="2" data-suffix=" €">0,00 €</span>
+          <span class="stat__label">je Portion</span>
+        </div>
+        <div class="stat" data-reveal style="--i:3">
+          <span class="stat__value" data-count="15.53" data-decimals="2" data-suffix=" €">0,00 €</span>
+          <span class="stat__label">gespart</span>
+        </div>
+      </div>
+
+      <p class="stats__foot" data-reveal>
+        Verglichen wird gegen sieben getrennte Einkäufe für dieselben Gerichte:
+        <b>55,70 €</b> mit <b>15,99 €</b> an Resten — gegen <b>40,17 €</b> mit <b>5,41 €</b>.
+        Der Unterschied ist nicht der Rabatt. Es ist die Packung, die zweimal gebraucht wird.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══ WAS DRIN IST (Bento) ══════════════════════════════════════ -->
+  <section class="section" id="koennen">
+    <div class="container">
+      <p class="eyebrow" data-reveal><span>Was drin ist</span></p>
+      <h2 class="h2" data-reveal>Kein Feature, das nicht misst</h2>
+
+      <div class="bento">
+        <article class="card bento__item--wide" data-reveal style="--i:0">
+          <span class="tag">Kern</span>
+          <h3>Der Wochenplan rechnet zusammen</h3>
+          <p>
+            Sieben Abende, eine Liste. Zutaten aus verschiedenen Rezepten werden
+            zusammengefasst, bevor gesucht wird — deshalb steht am Ende eine
+            Packung Hackfleisch da und nicht zwei halbe.
+          </p>
+          <div class="petals" role="img" aria-label="Verwertung 85 Prozent"></div>
+        </article>
+
+        <article class="card bento__item--third" data-reveal style="--i:1">
+          <span class="tag tag--pond">Import</span>
+          <h3>Chefkoch</h3>
+          <p>Suchen, antippen, im eigenen Rezeptbuch. Zutaten kommen mit.</p>
+        </article>
+
+        <article class="card bento__item--tall" data-reveal style="--i:2">
+          <span class="tag tag--rest">Reste</span>
+          <h3>Was übrig bleibt, wird sichtbar</h3>
+          <p>
+            Jede Zeile zeigt, wie viel der gekauften Packung du wirklich brauchst.
+            Bleibt zu viel übrig, schlägt Grocify ein Gericht vor, das den Rest
+            verbraucht.
+          </p>
+          <p class="handwritten">↑ das kann sonst keine Einkaufsliste</p>
+        </article>
+
+        <article class="card bento__item--third" data-reveal style="--i:3">
+          <span class="tag">Preise</span>
+          <h3>Albert Heijn</h3>
+          <p>Produktsuche, Packungsgrößen, Abteilungen — mit den Preisen von heute.</p>
+        </article>
+
+        <article class="card bento__item--half" data-reveal style="--i:4">
+          <span class="tag">Kontrolle</span>
+          <h3>Passt der Vorschlag nicht, wählst du selbst</h3>
+          <p>
+            Die Automatik trifft nicht immer. Dann tippst du auf die Zutat und
+            wählst das Produkt aus dem echten Sortiment — Grocify merkt es sich
+            und holt danach nur noch den Preis.
+          </p>
+        </article>
+
+        <article class="card bento__item--half" data-reveal style="--i:5">
+          <span class="tag tag--pond">Deutsch → Niederländisch</span>
+          <h3>„Weizenmehl" findet <i>tarwebloem</i></h3>
+          <p>
+            Ein gepflegtes Wörterbuch übersetzt Zutaten in das, was im
+            niederländischen Regal steht. Jeder Eintrag wurde gegen den echten
+            Katalog geprüft.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ EHRLICH GESAGT ════════════════════════════════════════════ -->
+  <section class="section section--warm" id="ehrlich">
+    <div class="container container--narrow">
+      <p class="eyebrow" data-reveal><span>Ehrlich gesagt</span></p>
+      <h2 class="h2" data-reveal>Was Grocify nicht kann</h2>
+
+      <ul class="honest">
+        <li data-reveal style="--i:0">
+          <b>Die Datenquelle ist geliehen.</b> Die Preise kommen aus dem internen
+          Backend der Albert-Heijn-App. Das ist keine lizenzierte Schnittstelle —
+          es gibt keine Zusage, und sie kann jederzeit abgeschaltet werden.
+        </li>
+        <li data-reveal style="--i:1">
+          <b>Jumbo ist zu.</b> Am 11.08.2026 antwortete die Schnittstelle noch mit
+          403, drei Tage später mit 404. Der Anbieter bleibt trotzdem in der App —
+          sichtbar, mit Begründung, statt versteckt.
+        </li>
+        <li data-reveal style="--i:2">
+          <b>Die Zuordnung ist eine Heuristik.</b> Sie trifft meistens, aber
+          „3 Eier" gegen „3er-Pack à 10 Stück" bekommt keine Wortzählung sauber
+          hin. Deshalb kannst du jedes Produkt selbst festlegen.
+        </li>
+        <li data-reveal style="--i:3">
+          <b>Es gibt genau einen Nutzer.</b> Grocify ist für eine Person gebaut.
+          Keine Konten, keine Cloud, keine Werbung — eine SQLite-Datei auf deinem
+          Rechner.
+        </li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container footer__inner">
+    <div class="footer__kees" id="kees-foot">
+      <div class="kees__bubble kees__bubble--foot">Du hast bis hier gelesen. Ich sitze schon den ganzen Tag hier.</div>
+      <svg class="kees__svg kees__svg--sm" viewBox="0 0 66 58" role="img" aria-label="Kees winkt zum Abschied">
+        <ellipse cx="33" cy="54" rx="21" ry="4" fill="var(--border)"></ellipse>
+        <ellipse cx="33" cy="36" rx="22" ry="17" fill="var(--frog)"></ellipse>
+        <ellipse cx="33" cy="42" rx="14" ry="9" fill="var(--frog-belly)"></ellipse>
+        <ellipse cx="9"  cy="44" rx="7" ry="4" fill="var(--frog-dark)" transform="rotate(-18 9 44)"></ellipse>
+        <ellipse cx="57" cy="44" rx="7" ry="4" fill="var(--frog-dark)" transform="rotate(18 57 44)"></ellipse>
+        <circle cx="21" cy="19" r="10" fill="var(--frog)"></circle>
+        <circle cx="45" cy="19" r="10" fill="var(--frog)"></circle>
+        <g class="kees__eyes">
+          <circle cx="21" cy="18" r="6" fill="var(--surface)"></circle>
+          <circle cx="45" cy="18" r="6" fill="var(--surface)"></circle>
+          <circle cx="21" cy="18" r="3.2" fill="var(--text)"></circle>
+          <circle cx="45" cy="18" r="3.2" fill="var(--text)"></circle>
+        </g>
+        <path d="M26 35 Q33 39 40 35" stroke="var(--text)" stroke-width="2.4" fill="none" stroke-linecap="round"></path>
+      </svg>
+    </div>
+
+    <div class="footer__text">
+      <p class="footer__brand">Grocify</p>
+      <p>
+        Läuft lokal. Zwei Befehle: <code>npm run server</code> und <code>npm run web</code>.
+      </p>
+      <p class="footer__fine">
+        Van Goghs Zonnebloemen hängen in Amsterdam, im Polder-Graben sitzt der Frosch —
+        dieselbe Landschaft, in der auch der Supermarkt steht.
+      </p>
+    </div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -42,3 +42,6 @@ yarn-error.*
 
 # Datenbank des Backends — deine Rezepte gehoeren dir, nicht dem Repo
 server/data/
+
+# Generierter Wissensgraph - mit "graphify update" neu baubar
+graphify-out/
