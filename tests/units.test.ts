@@ -16,7 +16,6 @@ import { describe, it } from 'node:test';
 import {
   formatQuantity,
   isAmbiguous,
-  scale,
   toBase,
   toBaseForIngredient,
   type Quantity,
@@ -79,35 +78,6 @@ describe('toBaseForIngredient — mit Zutat wird aufgelöst', () => {
   it('eindeutige Einheit braucht die Zutat gar nicht', () => {
     const base = toBaseForIngredient({ amount: 300, unit: 'g' }, 'voellig egal');
     assert.deepEqual(base, { amount: 300, dimension: 'mass' });
-  });
-});
-
-describe('scale — Portionen umrechnen', () => {
-  it('verdoppeln', () => {
-    assert.deepEqual(scale({ amount: 250, unit: 'g' }, 2, 4), { amount: 500, unit: 'g' });
-  });
-
-  it('halbieren', () => {
-    assert.deepEqual(scale({ amount: 4, unit: 'Stueck' }, 4, 2), { amount: 2, unit: 'Stueck' });
-  });
-
-  it('gleiche Portionszahl lässt die Menge unangetastet', () => {
-    assert.deepEqual(scale({ amount: 1, unit: 'l' }, 3, 3), { amount: 1, unit: 'l' });
-  });
-
-  it('null Ausgangsportionen wird abgelehnt statt still zu Infinity zu werden', () => {
-    // Division durch 0 wäre der klassische stille Fehler — die Einkaufsliste
-    // stünde dann auf „Infinity g Mehl". `scale` wirft stattdessen, und das
-    // ist die bessere Wahl: Ein Rezept mit 0 Portionen ist ein Datenfehler,
-    // der laut werden soll, kein Wert, den man weiterreicht.
-    assert.throws(
-      () => scale({ amount: 100, unit: 'g' }, 0, 4),
-      /fromServings/,
-    );
-  });
-
-  it('negative Ausgangsportionen ebenso', () => {
-    assert.throws(() => scale({ amount: 100, unit: 'g' }, -2, 4));
   });
 });
 

@@ -219,16 +219,11 @@ const ROUTES: Route[] = [
         throw new HttpError(400, 'Erwartet wird ein Einstellungs-Objekt');
       }
       const s = body as Partial<Settings>;
-      const portionen = Number(s.servingsPerMeal);
-      if (!Number.isFinite(portionen) || portionen < 1 || portionen > 12) {
-        throw new HttpError(400, 'servingsPerMeal muss zwischen 1 und 12 liegen');
-      }
       const sprache = s.searchLanguage;
       if (sprache && !['de', 'nl', 'en'].includes(sprache)) {
         throw new HttpError(400, 'searchLanguage muss de, nl oder en sein');
       }
       return db.saveSettings({
-        servingsPerMeal: Math.round(portionen),
         pantryReviewedAt:
           typeof s.pantryReviewedAt === 'string' ? s.pantryReviewedAt : undefined,
         searchLanguage: sprache,

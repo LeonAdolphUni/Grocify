@@ -14,7 +14,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { nutritionForRecipe, type RecipeNutrition } from '../domain/nutrition';
-import { scalingLabel } from '../domain/portions';
 import type { Recipe } from '../domain/types';
 import { formatQuantity } from '../domain/units';
 import { getProvider, SEARCH_PROVIDER_ID } from '../supermarkets/registry';
@@ -71,14 +70,6 @@ export function RecipeDetailScreen({ recipe, providerId, onEdit, onBack }: Props
         <View style={s.hero}>
           <RecipeThumb title={recipe.title} imageUrl={recipe.imageUrl} size={96} radius={14} />
 
-          {/* Stille Umrechnung wäre ein Vertrauensbruch: Wer „500 g
-              Hackfleisch" im Original kennt und hier „125 g" liest, muss
-              erfahren warum. */}
-          {scalingLabel(recipe) ? (
-            <View style={s.scaledBadge}>
-              <Text style={s.scaledText}>{scalingLabel(recipe)}</Text>
-            </View>
-          ) : null}
 
           {recipe.sourceUrl ? (
             <Pressable onPress={() => void Linking.openURL(recipe.sourceUrl!)} hitSlop={8}>
@@ -137,13 +128,6 @@ const s = StyleSheet.create({
 
   hero: { alignItems: 'center', gap: spacing.xs },
   heroIcon: { fontSize: 52 },
-  scaledBadge: {
-    backgroundColor: colors.sunSoft,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  scaledText: { fontSize: 12, color: colors.seed, fontWeight: '700' },
   source: { fontSize: 13, color: colors.primary, fontWeight: '600' },
   sourceMuted: { fontSize: 13, color: colors.textFaint },
 

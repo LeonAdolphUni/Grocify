@@ -13,7 +13,6 @@ import { StatusBar } from 'expo-status-bar';
 
 import { ApiError, api } from './src/api/client';
 import type { PantryItem } from './src/domain/pantry';
-import { scaleAll, scaleRecipe } from './src/domain/portions';
 import { DEFAULT_SETTINGS, isPantryReviewDue, type Settings } from './src/domain/settings';
 import type { Recipe } from './src/domain/types';
 import {
@@ -305,53 +304,14 @@ export default function App() {
     [recipes, plan],
   );
 
-  /**
-   * Portionszahl ändern.
-   *
-   * Wirkt sofort auf alles, was daraus entsteht — Einkaufsliste, Nährwerte,
-   * Portionsanzeige. Die Rezepte selbst bleiben unangetastet: In der
-   * Datenbank steht weiter „4 Portionen laut Allerhande".
-   */
-  const changeServings = useCallback(async (servingsPerMeal: number) => {
-    const vorher = settings;
-    setSettings({ servingsPerMeal });
-    try {
-      setSettings(await api.saveSettings({ servingsPerMeal }));
-      setToast({
-        text:
-          servingsPerMeal === 1
-            ? 'Rezepte werden auf 1 Portion gerechnet'
-            : `Rezepte werden auf ${servingsPerMeal} Portionen gerechnet`,
-      });
-    } catch (err) {
-      setSettings(vorher);
-      setFatal(err instanceof ApiError ? err.message : (err as Error).message);
-    }
-  }, [settings]);
-
-  /**
-   * Alle Rezepte auf die eingestellte Portionszahl umgerechnet.
-   *
-   * Grocify ist für eine Person gebaut, Rezepte sind es nie — Chefkoch
-   * liefert vier bis acht Portionen. Ohne diese Umrechnung kauft die App
-   * jede Woche ein Vielfaches des Bedarfs ein.
-   *
-   * Umgerechnet wird beim *Benutzen*, nicht beim Speichern: Das Original
-   * behält seine Herkunftsangabe, und wer die Portionszahl später ändert,
-   * verliert nichts.
-   */
-  const scaledRecipes = useMemo(
-    () => scaleAll(recipes, settings.servingsPerMeal),
-    [recipes, settings.servingsPerMeal],
-  );
 
   const planRecipes = useMemo(
-    () => recipesInPlan(plan, scaledRecipes),
-    [plan, scaledRecipes],
+    () => recipesInPlan(plan, recipes),
+    [plan, recipes],
   );
   const selectedRecipes = useMemo(
-    () => scaledRecipes.filter((r) => selectedIds.includes(r.id)),
-    [scaledRecipes, selectedIds],
+    () => recipes.filter((r) => selectedIds.includes(r.id)),
+    [recipes, selectedIds],
   );
 
   if (loading) {
@@ -389,7 +349,7 @@ export default function App() {
       {route.name === 'home' && (
         <HomeScreen
           plan={plan}
-          recipes={scaledRecipes}
+          recipes={recipes}
           onOpenWeek={() => setRoute({ name: 'week' })}
           onOpenRecipes={() => setRoute({ name: 'recipes' })}
           onOpenPantry={() => setRoute({ name: 'pantry' })}
@@ -397,15 +357,13 @@ export default function App() {
           pantryCount={pantry.length}
           pantryReviewDue={pantryReviewDue}
           onPantryReviewed={markPantryReviewed}
-          servingsPerMeal={settings.servingsPerMeal}
-          onChangeServings={changeServings}
         />
       )}
 
       {route.name === 'week' && (
         <WeekPlanScreen
           plan={plan}
-          recipes={scaledRecipes}
+          recipes={recipes}
           onAddRecipe={addToDay}
           onRemoveRecipe={removeFromDay}
           onClearWeek={clearWeek}
@@ -418,7 +376,7 @@ export default function App() {
 
       {route.name === 'recipes' && (
         <RecipeListScreen
-          recipes={scaledRecipes}
+          recipes={recipes}
           pantryCount={pantry.length}
           selectedIds={selectedIds}
           onToggleSelect={(id) =>
@@ -447,7 +405,7 @@ export default function App() {
 
       {route.name === 'recipe' &&
         (() => {
-          const recipe = scaledRecipes.find((r) => r.id === route.recipeId);
+          const recipe = recipes.find((r) => r.id === route.recipeId);
           if (!recipe) return null;
           return (
             <RecipeDetailScreen
@@ -517,7 +475,7 @@ export default function App() {
       {route.name === 'list' && (
         <ShoppingListScreen
           recipes={route.source}
-          allRecipes={scaledRecipes}
+          allRecipes={recipes}
           pantry={pantry}
           providerId={route.providerId}
           onBack={() => setRoute({ name: 'home' })}

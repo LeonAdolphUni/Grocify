@@ -229,12 +229,6 @@ export function toMassForIngredient(q: Quantity, ingredientId: string): BaseQuan
   return { amount: q.amount * grams, dimension: 'mass' };
 }
 
-/** Skaliert eine Menge auf eine andere Portionszahl. */
-export function scale(q: Quantity, fromServings: number, toServings: number): Quantity {
-  if (fromServings <= 0) throw new Error('fromServings muss > 0 sein');
-  return { ...q, amount: (q.amount * toServings) / fromServings };
-}
-
 /**
  * Formatiert eine Menge für die Anzeige.
  * Rundet auf zwei Nachkommastellen und schneidet überflüssige Nullen ab.

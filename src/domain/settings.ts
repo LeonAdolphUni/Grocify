@@ -10,15 +10,6 @@ import type { SearchLanguage } from './searchLanguage';
 
 export interface Settings {
   /**
-   * Auf wie viele Portionen jedes Rezept umgerechnet wird.
-   *
-   * Standard ist 1 — Grocify ist für eine Person gebaut, Rezepte sind es
-   * nie. Wer zwei Portionen kocht und zweimal isst, stellt hier 2 ein und
-   * wirft weniger weg: Die Packungsgrößen im Laden ändern sich nicht,
-   * nur der Anteil, den man davon braucht.
-   */
-  servingsPerMeal: number;
-  /**
    * Wann der Vorrat zuletzt durchgesehen wurde, als ISO-Datum.
    *
    * Leer heißt: noch nie. Daraus entsteht die wöchentliche Erinnerung —
@@ -67,4 +58,4 @@ export function startOfWeek(now: Date): Date {
   return d;
 }
 
-export const DEFAULT_SETTINGS: Settings = { servingsPerMeal: 1, searchLanguage: 'de' };
+export const DEFAULT_SETTINGS: Settings = { searchLanguage: 'de' };

@@ -61,14 +61,6 @@ export interface Ingredient {
 }
 
 export interface Recipe {
-  /**
-   * Ursprüngliche Portionszahl, wenn dieses Rezept umgerechnet wurde.
-   *
-   * Nur im Arbeitsspeicher gesetzt, nie gespeichert: Das Rezept in der
-   * Datenbank behält seine Herkunftsangabe („4 Portionen laut Allerhande"),
-   * umgerechnet wird beim Benutzen.
-   */
-  scaledFrom?: number;
   id: string;
   title: string;
   servings: number;

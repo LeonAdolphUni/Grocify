@@ -17,7 +17,6 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import type { PantryItem } from '../src/domain/pantry';
-import { DEFAULT_SERVINGS } from '../src/domain/portions';
 import type { Settings } from '../src/domain/settings';
 import type { Ingredient, Recipe } from '../src/domain/types';
 import type { Unit } from '../src/domain/units';
@@ -352,10 +351,7 @@ export class GrocifyDb {
     const map = new Map(rows.map((r) => [r.key, r.value]));
 
     // Standard ist eine Portion — der ganze Zweck dieser App.
-    const servings = Number(map.get('servingsPerMeal'));
     return {
-      servingsPerMeal:
-        Number.isFinite(servings) && servings >= 1 ? Math.round(servings) : DEFAULT_SERVINGS,
       pantryReviewedAt: map.get('pantryReviewedAt') || undefined,
       searchLanguage: (map.get('searchLanguage') as Settings['searchLanguage']) || 'de',
     };
@@ -367,7 +363,6 @@ export class GrocifyDb {
         `INSERT INTO settings (key, value) VALUES (?, ?)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       )
-      .run('servingsPerMeal', String(settings.servingsPerMeal));
 
     if (settings.searchLanguage) {
       this.db

@@ -473,26 +473,29 @@ Beim Zuordnen in der Trefferliste wird nur **vorwärts bis zum schließenden
 dem falschen Gericht zu — und ein falsches Bild ist schlimmer als gar keins.
 Fehlt eins, steht das Monogramm da, wie bisher.
 
-## Portionen: für eine Person gerechnet
+## Keine Portionseinstellung mehr
 
-Grocify ist für **eine Person** gebaut, Rezepte sind es nie — Allerhande
-liefert vier bis acht Portionen. Jedes Rezept wird deshalb beim *Benutzen*
-auf die eingestellte Portionszahl umgerechnet (Standard: 1). Das Original
-bleibt in der Datenbank unangetastet, samt Herkunftsangabe.
+Früher konnte man einstellen, für wie viele Personen gerechnet wird
+(Standard: 1), und jedes Rezept wurde beim Benutzen heruntergerechnet. Diese
+Einstellung ist **entfernt**, samt der ganzen Umrechnung (`portions.ts`).
 
-**Das hat einen messbaren Preis.** Derselbe Wochenplan, dreimal gerechnet:
+Sie war die Ursache der Zahlen, über die sich niemand freuen konnte:
 
 | Portionen | Einkauf | Verwertung | je Portion |
 |---|---|---|---|
 | 1 | 29,20 € | **40 %** | 4,17 € |
-| 2 | 29,90 € | 63 % | 2,14 € |
-| 4 | 40,17 € | 85 % | 1,43 € |
+| 4 | 40,17 € | 85 % | **1,43 €** |
 
-Packungen lassen sich nicht vierteln: Ein halbes Ei kann man nicht kaufen,
-ein Sechstel Kürbis auch nicht. Je kleiner man rechnet, desto mehr bleibt
-liegen. Von 1 auf 2 Portionen kostet **70 Cent mehr** und halbiert den
-Preis je Portion — deshalb ist die Zahl einstellbar und der Hinweis steht
-auf dem Startbildschirm, statt versteckt zu sein.
+Packungen lassen sich nicht vierteln. Ein Rezept für vier auf eine Person
+herunterzurechnen ändert nichts am Einkauf — man kauft dieselbe Packung
+Hackfleisch, dieselbe Sahne, dasselbe Glas — nur wird drei Viertel davon
+weggeworfen. Gerechnet wird deshalb in **Mahlzeiten**: Rezepte werden in
+voller Größe gekocht, und ihre Portionen sind die Mahlzeiten der nächsten
+Tage. Damit erübrigt sich die Einstellung — es gibt nichts mehr zu wählen.
+
+Die Portionszahl eines Rezepts bleibt natürlich erhalten. Sie steht in der
+Datenbank, wie Allerhande sie liefert, und sagt jetzt, für wie viele
+Mahlzeiten das Gericht reicht.
 
 ## Bewusste Entwurfsentscheidungen
 
