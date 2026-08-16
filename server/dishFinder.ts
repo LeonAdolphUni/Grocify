@@ -34,12 +34,13 @@ import { browseCategory, importRecipe, searchRecipes, type RecipeHit } from './a
 import { newId } from '../src/domain/id';
 import type { PantryItem } from '../src/domain/pantry';
 import { deductFromPantry } from '../src/domain/pantry';
+import { translateSearchQuery, type SearchLanguage } from '../src/domain/searchLanguage';
 import { buildShoppingList } from '../src/domain/shoppingList';
 import { isPantryStaple } from '../src/domain/translate';
 import { calculateStats, type Recipe } from '../src/domain/types';
 import type { PriceProvider, SearchOptions, SearchResult } from '../src/supermarkets/types';
 
-export interface AdvisorRequest {
+export interface FinderRequest {
   /** Worauf hast du Lust — schon auf Niederländisch übersetzt. */
   wishes: string[];
   /**
@@ -72,11 +73,75 @@ export interface AdvisorRequest {
   vegetarianOnly?: boolean;
   /** Höchste Zubereitungszeit in Minuten. Weiche Grenze, siehe `relaxed`. */
   maxMinutes?: number;
+  /**
+   * Ein Gericht suchen, das den **Vorrat aufbraucht**.
+   *
+   * Dreht die Suchrichtung um. Sonst sagt der Nutzer, worauf er Lust hat,
+   * und der Vorrat ist ein Bonus obendrauf. Hier bestimmt der Vorrat, wonach
+   * überhaupt gesucht wird — die ältesten Einträge werden zu Suchbegriffen,
+   * und Vorratsdeckung wiegt schwerer als alles andere.
+   *
+   * Der Anlass ist der Alltag: Man hat eine halbe Packung Reis und zwei
+   * Paprika und sucht nicht nach „Curry", sondern nach etwas, das genau das
+   * verbraucht.
+   */
+  useUpPantry?: boolean;
+  /** 'schnell' schoepft aus AHs schnellen Rezepten und deckelt die Zeit. */
+  speed?: 'schnell' | 'egal';
+  /** Sprache der Vorratsnamen, fuer die Uebersetzung in Suchbegriffe. */
+  searchLanguage?: SearchLanguage;
   /** Der Anbieter, bei dem die Preise geholt werden. Tests reichen einen eigenen. */
   provider?: PriceProvider;
 }
 
-export interface AdvisorPick {
+/**
+ * Wie viele Minuten „schnell" heißt.
+ *
+ * Als **reiner** Filter auf `totalTime` fände das kaum etwas: Die meisten
+ * Allerhande-Rezepte liegen bei 30 bis 40 Minuten, ein gemessener Lauf mit
+ * 20 Minuten warf 19 von 20 Kandidaten weg. Deshalb wird im schnellen Modus
+ * zusätzlich aus AHs **eigener** Auswahl schneller Rezepte geschöpft, statt
+ * einen beliebigen Ausgangsbestand scharf zu filtern.
+ */
+export const SCHNELL_MINUTEN = 15;
+
+/**
+ * Woraus geschöpft wird, wenn der Nutzer keinen Wunsch nennt.
+ *
+ * Je Modus eine eigene Liste. „Schnell" fragt AHs Auswahl schneller Rezepte
+ * zuerst; sonst stehen günstig und gesund vorn — die beiden Eigenschaften,
+ * die der Nutzer durchweg verlangt hat.
+ */
+export function quellenFuer(speed: 'schnell' | 'egal'): string[] {
+  return speed === 'schnell'
+    ? ['snelle-recepten', 'makkelijke-recepten', 'budget-recepten']
+    : ['budget-recepten', 'gezonde-recepten', 'eenpansgerechten'];
+}
+
+/**
+ * Macht aus dem Vorrat Suchbegriffe.
+ *
+ * Genommen werden die **ältesten** Einträge zuerst: Was am längsten liegt,
+ * soll am dringendsten weg. Höchstens drei, weil jeder Begriff eine
+ * gedrosselte Anfrage kostet.
+ *
+ * Vorratsware fliegt raus — nach einem Rezept für Salz zu suchen ist
+ * sinnlos, und aufbrauchen will man Salz auch nicht.
+ */
+export function pantryAlsWuensche(
+  pantry: PantryItem[],
+  uebersetze: (name: string) => string,
+  limit = 3,
+): string[] {
+  return [...pantry]
+    .filter((p) => !isPantryStaple(p.name))
+    .sort((a, b) => (a.updatedAt < b.updatedAt ? -1 : 1))
+    .slice(0, limit)
+    .map((p) => uebersetze(p.name).trim())
+    .filter((w) => w.length > 0);
+}
+
+export interface FinderPick {
   hit: RecipeHit;
   recipe: Recipe;
   score: number;
@@ -103,8 +168,8 @@ export interface AdvisorPick {
   mealsCovered: number;
 }
 
-export interface AdvisorResult {
-  picks: AdvisorPick[];
+export interface FinderResult {
+  picks: FinderPick[];
   /** Wünsche, für die Allerhande nichts hergab. */
   unmatched: string[];
   /** Wie viele Rezeptseiten geholt wurden — für die Ehrlichkeit der Wartezeit. */
@@ -137,15 +202,6 @@ export interface AdvisorResult {
   /** Wie viele Mahlzeiten zusammengekommen sind. */
   mealsCovered: number;
 }
-
-/**
- * Kategorien, aus denen ohne konkreten Wunsch geschöpft wird.
- *
- * Bewusst die gesunden und die einfachen: Wer nichts sagt, will nicht
- * zufällige Rezepte, sondern brauchbare. Zwei Kategorien statt einer, damit
- * die Woche nicht aus sieben Salaten besteht.
- */
-const FALLBACK_KATEGORIEN = ['gezonde-recepten', 'makkelijke-recepten', 'eenpansgerechten'];
 
 /**
  * Wie viele Rezeptseiten höchstens geholt werden.
@@ -392,20 +448,36 @@ export function lockerungsStufen(
  * dann die besten im Detail holen (teuer, eine Anfrage je Rezept). Ohne
  * diese Trennung würde jeder Vorschlag hundert Seiten ziehen.
  */
-export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
+export async function findDishes(req: FinderRequest): Promise<FinderResult> {
   const {
-    wishes,
     meals,
     pantry,
     rejected = [],
     maxPricePerServing,
     vegetarianOnly = false,
     maxMinutes,
+    speed = 'egal',
+    useUpPantry = false,
+    searchLanguage = 'de',
     provider,
   } = req;
   const abgelehnt = new Set(rejected);
   const preise = provider ? withPriceCache(provider) : null;
   const filtered: { title: string; reason: string }[] = [];
+
+  // Im Vorrat-aufbrauchen-Modus bestimmt der Vorrat die Suche. Eigene
+  // Wünsche behalten trotzdem Vorrang — wer „Vorrat aufbrauchen" wählt
+  // *und* „Suppe" tippt, will Suppe aus dem Vorrat, nicht irgendetwas.
+  const wishes =
+    req.wishes.length > 0
+      ? req.wishes
+      : useUpPantry
+        ? pantryAlsWuensche(pantry, (n) => translateSearchQuery(n, searchLanguage))
+        : [];
+
+  // „Schnell" setzt die Zeitgrenze, wenn der Aufrufer keine eigene nennt.
+  const effektiveMinuten =
+    maxMinutes ?? (speed === 'schnell' ? SCHNELL_MINUTEN : undefined);
 
   // ── Schritt 1: Kandidaten sammeln ──────────────────────────────────
   //
@@ -417,7 +489,7 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
   const gesehen = new Set<string>();
   const unmatched: string[] = [];
 
-  const quellen = wishes.length > 0 ? wishes : FALLBACK_KATEGORIEN;
+  const quellen = wishes.length > 0 ? wishes : quellenFuer(speed);
 
   for (const quelle of quellen) {
     try {
@@ -523,15 +595,15 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
   // ── Schritt 3: gierig auswählen ────────────────────────────────────
   //
   // Als Funktion, weil sie mehrfach mit gelockerten Grenzen laufen kann.
-  const waehlen = (grenze: { minutes?: number; budget?: number }): AdvisorPick[] => {
-  const picks: AdvisorPick[] = [];
+  const waehlen = (grenze: { minutes?: number; budget?: number }): FinderPick[] => {
+  const picks: FinderPick[] = [];
   const imKorb = new Set<string>();
   const abgedeckteWuensche = new Set<string>();
   let verbleibenderVorrat = pantry;
   let gedeckteMahlzeiten = 0;
 
   while (gedeckteMahlzeiten < meals && geholt.length > picks.length) {
-    let best: AdvisorPick | null = null;
+    let best: FinderPick | null = null;
     let bestIndex = -1;
 
     geholt.forEach((k, i) => {
@@ -612,7 +684,12 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
       ).length;
       const vorratsanteil = zutaten.length > 0 ? gedeckt / zutaten.length : 0;
       if (vorratsanteil > 0) {
-        score += 2.0 * vorratsanteil;
+        // Im Aufbrauch-Modus ist der Vorrat **der Zweck**, nicht ein Bonus:
+        // Wer den Knopf drückt, will die halbe Packung Reis loswerden und
+        // nimmt dafür ein etwas teureres oder langsameres Gericht in Kauf.
+        // Deshalb wiegt die Deckung dort schwerer als Preis und Gesundheit
+        // zusammen.
+        score += (useUpPantry ? 6.0 : 2.0) * vorratsanteil;
         reasons.push(`${Math.round(vorratsanteil * 100)} % aus dem Vorrat`);
       }
 
@@ -633,7 +710,7 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
       // Budget — ebenfalls weich, siehe `lockerungsStufen`.
       if (grenze.budget !== undefined && p && p.price > grenze.budget) return;
 
-      const kandidat: AdvisorPick = {
+      const kandidat: FinderPick = {
         hit: k.hit,
         recipe,
         score: Math.round(score * 100) / 100,
@@ -656,7 +733,7 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
 
     if (!best || bestIndex < 0) break;
 
-    const gewaehlt: AdvisorPick = best;
+    const gewaehlt: FinderPick = best;
     picks.push(gewaehlt);
     gedeckteMahlzeiten += gewaehlt.mealsCovered;
     for (const z of echteZutaten(gewaehlt.recipe)) imKorb.add(z.id);
@@ -672,8 +749,8 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
   // Gericht ist keine Antwort auf „plan mir die Woche" — gemessen kam
   // genau das heraus: 1 Gericht von 7 verlangten, weil 19 Kandidaten an
   // 20 Minuten und 2 € scheiterten.
-  const stufen = lockerungsStufen(maxMinutes, maxPricePerServing);
-  let picks: AdvisorPick[] = [];
+  const stufen = lockerungsStufen(effektiveMinuten, maxPricePerServing);
+  let picks: FinderPick[] = [];
   let genutzteStufe = stufen[0];
 
   for (const stufe of stufen) {
@@ -742,7 +819,7 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
 }
 
 /** Wie viele Mahlzeiten eine Auswahl zusammen ergibt. */
-function mahlzeiten(picks: AdvisorPick[]): number {
+function mahlzeiten(picks: FinderPick[]): number {
   return picks.reduce((n, p) => n + p.mealsCovered, 0);
 }
 

@@ -16,6 +16,7 @@
  * am Herd stehen.
  */
 
+import { translateSearchQuery, type SearchLanguage } from './searchLanguage';
 import { normalizeKey } from './translate';
 import type { Ingredient } from './types';
 import { toBaseForIngredient, type Dimension } from './units';
@@ -81,26 +82,177 @@ const UNREGELMAESSIG: Record<string, string> = {
 /**
  * Meinen zwei Namen dieselbe Zutat?
  *
- * Der Grund für diese Funktion ist ein echter Fehler: Wer „2 Zwiebeln" in
- * den Vorrat tippt — der natürliche deutsche Plural —, dessen Eintrag lief
- * unter `zwiebeln`. Im Rezept steht aber `zwiebel`, weil der Import die
- * Einzahl liefert. Der Abgleich fand nichts, und der Vorrat wurde
- * kommentarlos ignoriert.
+ * Zwei echte Fehler haben diese Funktion geformt.
  *
- * Verglichen wird deshalb Stamm gegen Stamm plus bekannte Pluralendung.
- * Mindestens drei Zeichen Stamm, sonst würde „Eis" zum Plural von „Ei".
+ * **Der Plural.** Wer „2 Zwiebeln" in den Vorrat tippt — der natürliche
+ * deutsche Plural —, dessen Eintrag lief unter `zwiebeln`. Im Rezept steht
+ * aber `zwiebel`, weil der Import die Einzahl liefert. Der Abgleich fand
+ * nichts, und der Vorrat wurde kommentarlos ignoriert. Verglichen wird
+ * deshalb Stamm gegen Stamm plus bekannte Pluralendung; mindestens drei
+ * Zeichen Stamm, sonst würde „Eis" zum Plural von „Ei".
+ *
+ * **Die Sprache.** Seit die Rezepte aus Allerhande kommen, stehen ihre
+ * Zutaten auf **Niederländisch** — der Vorrat aber in der Sprache, in der
+ * der Nutzer tippt. „Reis" gegen „rijst", „Zwiebel" gegen „ui", „Käse"
+ * gegen „kaas": alles unähnlich, alles derselbe Gegenstand. Gemessen wurde
+ * damit **gar nichts** mehr abgezogen, außer bei Zufallstreffern wie
+ * „Paprika"/„paprika" — die ganze Vorratsfunktion war still ausgefallen,
+ * seit die Rezeptquelle gewechselt hat.
+ *
+ * Deshalb wird zusätzlich über die Suchübersetzung verglichen, und zwar in
+ * **beide Richtungen**: Es steht nicht fest, welcher der beiden Namen der
+ * deutsche ist.
  */
-export function sameIngredientName(a: string, b: string): boolean {
+export function sameIngredientName(a: string, b: string, from: SearchLanguage = 'de'): boolean {
+  if (gleicherStamm(a, b)) return true;
+
+  // Bei „nl" ist die Übersetzung die Identität — der Vergleich oben hat
+  // dann schon entschieden.
+  if (from === 'nl') return false;
+
+  // **Plural und Sprache müssen zusammen greifen.** Getrennt scheitert
+  // genau der Fall, der im Alltag vorkommt: Man tippt „2 Zwiebeln", das
+  // Rezept sagt „ui". Die Pluralregel oben kommt von „zwiebeln" nicht auf
+  // „ui", und das Wörterbuch kennt „zwiebel", nicht „zwiebeln". Deshalb
+  // wird jede Singularform übersetzt, nicht nur das Wort wie getippt.
+  for (const kandidat of singularformen(a)) {
+    if (gleicherStamm(translateSearchQuery(kandidat, from), b)) return true;
+  }
+  for (const kandidat of singularformen(b)) {
+    if (gleicherStamm(a, translateSearchQuery(kandidat, from))) return true;
+  }
+  return false;
+}
+
+/**
+ * Das Wort selbst plus die Singularformen, die daraus entstehen können.
+ *
+ * Rein mechanisch — ob „zwiebel" ein Wort ist, entscheidet erst das
+ * Wörterbuch. Ein Fehlgriff („Rei" aus „Reis") übersetzt zu sich selbst und
+ * trifft dann nichts, kostet also nur einen Vergleich.
+ */
+function singularformen(name: string): string[] {
+  const wort = name.trim().toLowerCase();
+  const formen = [wort];
+
+  for (const endung of PLURAL_ENDUNGEN) {
+    if (wort.length - endung.length >= 3 && wort.endsWith(endung)) {
+      formen.push(wort.slice(0, -endung.length));
+    }
+  }
+  return formen;
+}
+
+/** Der reine Namensvergleich: Gleichheit, unregelmäßiger Plural, Stamm + Endung. */
+function gleicherStamm(a: string, b: string): boolean {
   const ka = normalizeKey(a);
   const kb = normalizeKey(b);
   if (ka === kb) return true;
 
   if (UNREGELMAESSIG[ka] === kb || UNREGELMAESSIG[kb] === ka) return true;
 
+  // Auch über die niederländische Form vergleichen: Allerhande schreibt
+  // „rode paprika's", „rode uien", „zilvervliesrijst" — Adjektiv davor,
+  // Plural hinten, Kopf im Kompositum ganz hinten.
+  const na = nlStamm(a);
+  const nb = nlStamm(b);
+  if (na.stamm && nb.stamm) {
+    if (na.stamm === nb.stamm) return true;
+    // Die Kompositum-Regel nur, wenn beide Namen ausschließlich aus Kopf
+    // und bekannten Beiwörtern bestehen — sonst verschluckt sie das Wort,
+    // auf das es ankommt.
+    if (na.rein && nb.rein && kopfGleich(na.stamm, nb.stamm)) return true;
+  }
+
   const [kurz, lang] = ka.length <= kb.length ? [ka, kb] : [kb, ka];
   if (kurz.length < 3 || !lang.startsWith(kurz)) return false;
 
   return PLURAL_ENDUNGEN.includes(lang.slice(kurz.length));
+}
+
+/**
+ * Niederländische Beiwörter, die den Gegenstand nicht ändern.
+ *
+ * **Sehr bewusst eng gehalten.** „Rode paprika" ist eine Paprika und „grote
+ * ui" eine Zwiebel — aber „zoete aardappel" ist **keine** Kartoffel, und
+ * „gedroogde linzen" sind nicht dasselbe wie frische. Wer Geschmacks- und
+ * Verarbeitungswörter mitstreicht, verrechnet Süßkartoffeln gegen
+ * Kartoffeln und lässt den Nutzer vor dem Regal stehen. Farbe und Größe
+ * sind sicher, alles andere nicht.
+ */
+const NL_BEIWORT = new Set([
+  'rode', 'rood', 'gele', 'geel', 'groene', 'groen', 'witte', 'wit',
+  'bruine', 'bruin', 'grote', 'groot', 'kleine', 'klein', 'middelgrote',
+  'middelgroot', 'halve', 'hele', 'verse', 'vers', 'biologische',
+  'biologisch', 'fijne', 'grove',
+]);
+
+/**
+ * Reduziert einen niederländischen Zutatennamen auf seinen Stamm.
+ *
+ * Bekannte Beiwörter fallen weg, die Pluralendung des letzten Wortes auch:
+ * `rode paprika's` → `paprika`, `uien` → `ui`.
+ *
+ * `rein` sagt, ob dabei **nur** bekannte Beiwörter weggefallen sind. Bleibt
+ * ein unbekanntes Wort stehen — „zoete aardappelen" —, wird es Teil des
+ * Stamms und der Name gilt als unrein. Das ist der Unterschied zwischen
+ * Kartoffel und Süßkartoffel, und ohne diese Unterscheidung verrechnet die
+ * App die beiden gegeneinander.
+ */
+function nlStamm(name: string): { stamm: string; rein: boolean } {
+  const woerter = name
+    .toLowerCase()
+    .replace(/['’]s\b/g, 's')
+    .split(/[^a-zà-ÿ]+/)
+    .filter(Boolean);
+
+  while (woerter.length > 1 && NL_BEIWORT.has(woerter[0])) woerter.shift();
+  if (woerter.length === 0) return { stamm: '', rein: false };
+
+  const kopf = woerter[woerter.length - 1];
+  let kern = kopf;
+  // Mindestlänge **je Endung**, nicht pauschal. „ui" ist ein echtes
+  // zweibuchstabiges Wort, `uien` muss also auf zwei Zeichen schrumpfen
+  // dürfen. Beim `-s` wäre dieselbe Großzügigkeit ein Fehler: Sie machte
+  // aus „Eis" ein „Ei" und verrechnete Speiseeis gegen Eier.
+  for (const [endung, mindestens] of [['eren', 2], ['en', 2], ['s', 3]] as const) {
+    if (kopf.endsWith(endung) && kopf.length - endung.length >= mindestens) {
+      kern = kopf.slice(0, -endung.length);
+      break;
+    }
+  }
+
+  // Was vor dem Kopf übrig blieb, ist unbekannt und gehört zum Namen.
+  const rest = woerter.slice(0, -1);
+  return { stamm: [...rest, kern].join(''), rein: rest.length === 0 };
+}
+
+/**
+ * Paare, die sich zwar hinten gleichen, aber verschiedene Dinge sind.
+ *
+ * **„aardappel" endet auf „appel".** Ohne diese Sperre verrechnet die App
+ * Kartoffeln gegen Äpfel — und der Nutzer steht ohne Kartoffeln da, weil
+ * die Liste sie für gedeckt hielt. Genau der Fehlertyp, den diese Datei
+ * sonst verhindert.
+ */
+const KEINE_KOMPOSITA: [string, string][] = [['aardappel', 'appel']];
+
+/**
+ * Ist das eine Wort das Kompositum des anderen?
+ *
+ * `zilvervliesrijst` ist Reis, `volkorenpasta` ist Pasta. Verlangt werden
+ * **mindestens fünf Zeichen** im Kopfwort: Bei kurzen Wörtern wie „ui" oder
+ * „kip" träfe die Regel zufällig auf alles Mögliche zu, und ein falscher
+ * Treffer ist hier teurer als ein verpasster — er streicht eine Zutat von
+ * der Einkaufsliste, die man wirklich braucht.
+ */
+function kopfGleich(a: string, b: string): boolean {
+  const [kurz, lang] = a.length <= b.length ? [a, b] : [b, a];
+  if (kurz.length < 5 || !lang.endsWith(kurz)) return false;
+
+  return !KEINE_KOMPOSITA.some(
+    ([x, y]) => (lang.startsWith(x) && kurz === y) || (lang.startsWith(y) && kurz === x),
+  );
 }
 
 /**

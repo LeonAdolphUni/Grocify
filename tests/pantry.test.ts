@@ -196,6 +196,110 @@ describe('sameIngredientName — Singular gegen Plural', () => {
   });
 });
 
+describe('sameIngredientName — Vorrat deutsch, Rezept niederlaendisch', () => {
+  // Der schwerste bisher gefundene Fehler in diesem Projekt, und er war
+  // vollstaendig stumm: Seit die Rezepte aus Allerhande kommen, stehen ihre
+  // Zutaten auf Niederlaendisch. Der Vorrat steht auf Deutsch. Gemessen
+  // wurde damit NICHTS mehr abgezogen — ausser bei Zufallstreffern wie
+  // "Paprika"/"paprika". Die Einkaufsliste kaufte alles doppelt, ohne dass
+  // irgendwo eine Warnung stand.
+
+  it('erkennt uebersetzte Zutaten', () => {
+    assert.equal(sameIngredientName('Reis', 'rijst'), true);
+    assert.equal(sameIngredientName('Zwiebel', 'ui'), true);
+    assert.equal(sameIngredientName('Käse', 'kaas'), true);
+    assert.equal(sameIngredientName('Hähnchen', 'kip'), true);
+  });
+
+  it('erkennt sie auch im Plural — so tippt man den Vorrat wirklich', () => {
+    // Plural UND Sprache muessen zusammen greifen. Getrennt scheitert genau
+    // der Alltagsfall: Die Pluralregel kommt von "zwiebeln" nicht auf "ui",
+    // und das Woerterbuch kennt "zwiebel", nicht "zwiebeln".
+    assert.equal(sameIngredientName('Zwiebeln', 'ui'), true);
+    assert.equal(sameIngredientName('Kartoffeln', 'aardappelen'), true);
+  });
+
+  it('funktioniert in beide Richtungen', () => {
+    // Es steht nicht fest, welcher der beiden Namen der deutsche ist.
+    assert.equal(sameIngredientName('rijst', 'Reis'), true);
+    assert.equal(sameIngredientName('ui', 'Zwiebeln'), true);
+  });
+
+  it('verwechselt trotzdem nichts', () => {
+    // Uebersetzen darf nicht dazu fuehren, dass alles auf alles passt.
+    assert.equal(sameIngredientName('Reis', 'kaas'), false);
+    assert.equal(sameIngredientName('Zwiebel', 'kip'), false);
+    assert.equal(sameIngredientName('Mehl', 'suiker'), false);
+    assert.equal(sameIngredientName('Reis', 'rijstwafel'), false);
+  });
+
+  it('zieht den Vorrat dann auch wirklich ab', () => {
+    // Der Beweis am ganzen Weg, nicht nur am Namensvergleich.
+    const d = deductFromPantry(
+      { id: 'rijst', name: 'rijst', quantity: { amount: 300, unit: 'g' } },
+      [{ id: 'reis', name: 'Reis', quantity: { amount: 500, unit: 'g' }, updatedAt: '2026-08-01T10:00:00Z' }],
+    );
+    assert.equal(d.fullyCovered, true);
+    assert.equal(d.covered, 300);
+  });
+
+  it('wer niederlaendisch tippt, braucht keine Uebersetzung', () => {
+    assert.equal(sameIngredientName('rijst', 'rijst', 'nl'), true);
+    assert.equal(sameIngredientName('Reis', 'rijst', 'nl'), false);
+  });
+});
+
+describe('sameIngredientName — niederlaendische Grammatik', () => {
+  // Gefunden beim Nachsehen, warum "Vorrat aufbrauchen" 0 % lieferte: Die
+  // Uebersetzung stimmte, aber Allerhande schreibt "rode paprika's", "rode
+  // uien", "zilvervliesrijst". Adjektiv davor, Plural hinten, Kopf im
+  // Kompositum ganz hinten — nichts davon traf.
+
+  it('sieht ueber Farb- und Groessenwoerter hinweg', () => {
+    assert.equal(sameIngredientName('Paprika', 'rode paprika'), true);
+    assert.equal(sameIngredientName('Zwiebel', 'middelgrote ui'), true);
+  });
+
+  it('versteht den niederlaendischen Plural', () => {
+    assert.equal(sameIngredientName('Zwiebeln', 'uien'), true);
+    assert.equal(sameIngredientName('Paprika', "rode paprika's"), true);
+  });
+
+  it('erkennt den Kopf im Kompositum — der steht hinten', () => {
+    // Niederlaendisch bildet Zusammensetzungen kopf-final:
+    // "zilvervliesrijst" ist Reis.
+    assert.equal(sameIngredientName('Reis', 'zilvervliesrijst'), true);
+  });
+
+  it('faellt nicht auf "rijstwafels" herein', () => {
+    // Kopf-final heisst auch: "rijstwafel" ist eine Waffel, kein Reis.
+    assert.equal(sameIngredientName('Reis', 'rijstwafels'), false);
+  });
+
+  it('haelt Suesskartoffeln von Kartoffeln getrennt', () => {
+    // "zoete" ist kein Beiwort, sondern der Unterschied. Wer es
+    // wegstreicht, meldet Kartoffeln als gedeckt, die es nicht gibt.
+    assert.equal(sameIngredientName('Kartoffeln', 'zoete aardappelen'), false);
+    assert.equal(sameIngredientName('Kartoffeln', 'aardappelen'), true);
+  });
+
+  it('macht aus "Eis" kein "Ei"', () => {
+    // Die niederlaendische Pluralregel darf das deutsche "-s" nicht
+    // mitnehmen. Deshalb gilt die Mindestlaenge je Endung: "uien" darf auf
+    // zwei Zeichen schrumpfen, "Eis" nicht.
+    assert.equal(sameIngredientName('Ei', 'Eis'), false);
+    assert.equal(sameIngredientName('Zwiebeln', 'uien'), true);
+  });
+
+  it('verwechselt Kartoffeln nicht mit Aepfeln', () => {
+    // "aardappelen" endet auf "appelen". Ohne ausdrueckliche Sperre faellt
+    // die Kompositum-Regel genau hier herein — und der Nutzer steht ohne
+    // Kartoffeln da, weil die Liste sie fuer gedeckt hielt.
+    assert.equal(sameIngredientName('Äpfel', 'aardappelen'), false);
+    assert.equal(sameIngredientName('Apfel', 'aardappel'), false);
+  });
+});
+
 describe('deductFromPantry — Plural in der Praxis', () => {
   it('2 Zwiebeln im Vorrat decken 2 Zwiebeln im Rezept', () => {
     const eintrag: PantryItem = {

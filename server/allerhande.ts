@@ -392,9 +392,16 @@ export interface RecipeCategory {
  * Rezeptkategorien von Allerhande.
  *
  * Jeder Eintrag wurde einzeln geprüft: Von 32 vermuteten Slugs lieferten
- * nur diese 21 tatsächlich Rezepte — „vlees", „vis" und „ontbijt" gibt es
- * als Seite gar nicht (404), „wraps" und „risotto" antworten mit 403. Eine
+ * nur diese tatsächlich Rezepte — „vlees", „vis" und „ontbijt" gibt es als
+ * Seite gar nicht (404), „wraps" und „risotto" antworten mit 403. Eine
  * Kategorie, die ins Leere führt, ist schlimmer als eine fehlende.
+ *
+ * `snelle-recepten` und `budget-recepten` kamen später dazu und wurden
+ * ebenso geprüft (9 bzw. 12 Rezepte). Sie tragen den Gericht-Finder: Ein
+ * reiner Zeitfilter auf `totalTime` findet kaum etwas, weil die meisten
+ * Allerhande-Rezepte bei 30 bis 40 Minuten liegen — AHs eigene Auswahl
+ * schneller Rezepte ist die bessere Quelle als ein scharfer Filter auf
+ * einem beliebigen Ausgangsbestand.
  *
  * Die Gruppen sind unsere Ordnung, nicht AHs: Sie tragen die Reiter der
  * Katalogansicht.
@@ -416,6 +423,8 @@ export const CATEGORIES: RecipeCategory[] = [
   { slug: 'mexicaanse-recepten', label: 'Mexikanisch', group: 'Küchen' },
   { slug: 'midden-oosterse-recepten', label: 'Orientalisch', group: 'Küchen' },
 
+  { slug: 'snelle-recepten', label: 'Schnell', group: 'Art' },
+  { slug: 'budget-recepten', label: 'Günstig', group: 'Art' },
   { slug: 'makkelijke-recepten', label: 'Einfach', group: 'Art' },
   { slug: 'eenpansgerechten', label: 'Ein Topf', group: 'Art' },
   { slug: 'airfryer-recepten', label: 'Heißluftfritteuse', group: 'Art' },

@@ -1,9 +1,15 @@
 /**
- * Der Wochenplaner — als Formular.
+ * Der Gericht-Finder — als Formular.
  *
  * Er sucht bei **Albert Heijn**, nicht im eigenen Rezeptbuch: Das wäre ein
- * Kreis — man kann nur planen, was man schon hat, und wer acht Rezepte
- * besitzt, bekommt achtmal dieselbe Woche.
+ * Kreis — man findet nur, was man schon hat, und wer acht Rezepte besitzt,
+ * bekommt achtmal dasselbe.
+ *
+ * **Warum Finder und nicht Wochenplaner.** Als Planer musste er eine ganze
+ * Woche auf einmal füllen und scheiterte, sobald die Filter streng waren.
+ * Als Finder beantwortet er die Frage, die man sich abends wirklich stellt:
+ * „Was koche ich?" — schnell oder in Ruhe, günstig, und am liebsten aus dem,
+ * was noch da ist.
  *
  * **Warum ein Formular und kein Gespräch.** Die vorige Fassung war ein
  * Chat. Beim ersten echten Durchlauf kam eine zu teure Woche heraus, und im
@@ -25,7 +31,7 @@
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { ApiError, api, type AdvisorPick } from '../api/client';
+import { ApiError, api, type FinderPick } from '../api/client';
 import { translateSearchQuery, type SearchLanguage } from '../domain/searchLanguage';
 import { WEEKDAYS, WEEKDAY_SHORT, emptyWeek, type WeekPlan } from '../domain/weekPlan';
 import { parseWishes } from '../domain/weekPlanner';
@@ -36,7 +42,7 @@ import { colors, euro, fonts, radius, spacing } from '../ui/theme';
 interface Props {
   language: SearchLanguage;
   pantryCount: number;
-  onApply: (plan: WeekPlan, picks: AdvisorPick[]) => void;
+  onApply: (plan: WeekPlan, picks: FinderPick[]) => void;
   onBack: () => void;
 }
 
@@ -65,25 +71,41 @@ const BUDGETS: { label: string; value?: number }[] = [
  */
 const MAHLZEITEN = [4, 5, 7, 10, 14];
 
-const ZEITEN: { label: string; value?: number }[] = [
-  { label: '20 Min', value: 20 },
-  { label: '30 Min', value: 30 },
-  { label: '45 Min', value: 45 },
-  { label: 'egal', value: undefined },
+/**
+ * Nur zwei Stufen, wie vom Nutzer verlangt.
+ *
+ * Feinere Minutenwahl war die vorige Fassung und half nicht: Wer abends
+ * kocht, weiß „ich hab keine Zeit" oder „ich hab Zeit", nicht „ich hab 27
+ * Minuten". „Schnell" schöpft dabei aus AHs eigener Auswahl schneller
+ * Rezepte — ein reiner 15-Minuten-Filter auf beliebigen Rezepten fände
+ * fast nichts.
+ */
+const TEMPO: { label: string; value: 'schnell' | 'egal'; hint: string }[] = [
+  { label: 'Schnell', value: 'schnell', hint: 'höchstens 15 Minuten' },
+  { label: 'Hab Zeit', value: 'egal', hint: 'Dauer egal' },
 ];
 
-export function PlannerScreen({ language, pantryCount, onApply, onBack }: Props) {
+export function FinderScreen({ language, pantryCount, onApply, onBack }: Props) {
   const [freitext, setFreitext] = useState('');
   const [gewaehlt, setGewaehlt] = useState<string[]>([]);
-  const [meals, setMeals] = useState(7);
+  const [meals, setMeals] = useState(4);
   const [budget, setBudget] = useState<number | undefined>(2.5);
-  const [maxMinutes, setMaxMinutes] = useState<number | undefined>(undefined);
+  const [tempo, setTempo] = useState<'schnell' | 'egal'>('egal');
   const [vegetarisch, setVegetarisch] = useState(false);
 
-  const [result, setResult] = useState<Awaited<ReturnType<typeof api.adviseWeek>> | null>(null);
+  const [result, setResult] = useState<Awaited<ReturnType<typeof api.findDishes>> | null>(null);
   const [rejected, setRejected] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Ob die letzte Suche aus dem Vorrat kam.
+   *
+   * Muss über die Suche hinaus erhalten bleiben, nicht nur während des
+   * Ladens: Lehnt der Nutzer einen Vorschlag ab, wird nachgesucht — und
+   * zwar in derselben Richtung. Sonst käme auf „ersetzen" plötzlich ein
+   * Gericht, das mit dem Vorrat nichts zu tun hat.
+   */
+  const [vorratModus, setVorratModus] = useState(false);
 
   /** Alle Wünsche, übersetzt — Chips und Freitext zusammen. */
   const wuensche = useCallback(() => {
@@ -91,18 +113,24 @@ export function PlannerScreen({ language, pantryCount, onApply, onBack }: Props)
     return [...new Set(roh.map((w) => translateSearchQuery(w, language)).filter(Boolean))];
   }, [gewaehlt, freitext, language]);
 
+  /**
+   * `ausVorrat` wird durchgereicht statt aus dem Zustand gelesen: Beim Start
+   * per Knopf ist `setVorratModus` noch nicht wirksam, und die Suche liefe
+   * in der falschen Richtung.
+   */
   const suchen = useCallback(
-    async (ablehnungen: string[]) => {
+    async (ablehnungen: string[], ausVorrat: boolean) => {
       setLoading(true);
       setError(null);
       try {
         setResult(
-          await api.adviseWeek({
+          await api.findDishes({
             wishes: wuensche(),
             meals,
             maxPricePerServing: budget,
             vegetarianOnly: vegetarisch,
-            maxMinutes,
+            speed: tempo,
+            useUpPantry: ausVorrat,
             rejected: ablehnungen,
           }),
         );
@@ -112,16 +140,26 @@ export function PlannerScreen({ language, pantryCount, onApply, onBack }: Props)
         setLoading(false);
       }
     },
-    [wuensche, meals, budget, vegetarisch, maxMinutes],
+    [wuensche, meals, budget, vegetarisch, tempo],
+  );
+
+  /** Startet eine frische Suche und merkt sich ihre Richtung. */
+  const starten = useCallback(
+    (ausVorrat: boolean) => {
+      setVorratModus(ausVorrat);
+      setRejected([]);
+      void suchen([], ausVorrat);
+    },
+    [suchen],
   );
 
   const ablehnen = useCallback(
-    (pick: AdvisorPick) => {
+    (pick: FinderPick) => {
       const naechste = [...rejected, pick.hit.id];
       setRejected(naechste);
-      void suchen(naechste);
+      void suchen(naechste, vorratModus);
     },
-    [rejected, suchen],
+    [rejected, suchen, vorratModus],
   );
 
   /**
@@ -164,7 +202,7 @@ export function PlannerScreen({ language, pantryCount, onApply, onBack }: Props)
     <Screen>
       <Header
         tone="pond"
-        title="Woche planen"
+        title="Gericht finden"
         subtitle={`Rezepte von Albert Heijn${pantryCount > 0 ? ` · ${pantryCount} im Vorrat` : ''}`}
         onBack={onBack}
       />
@@ -232,14 +270,17 @@ export function PlannerScreen({ language, pantryCount, onApply, onBack }: Props)
             </View>
           </Feld>
 
-          <Feld label="Höchstens Zubereitungszeit">
+          <Feld
+            label="Wie viel Zeit hast du?"
+            hint={TEMPO.find((z) => z.value === tempo)?.hint}
+          >
             <View style={s.row}>
-              {ZEITEN.map((z) => (
+              {TEMPO.map((z) => (
                 <Wahl
-                  key={z.label}
+                  key={z.value}
                   label={z.label}
-                  on={maxMinutes === z.value}
-                  onPress={() => setMaxMinutes(z.value)}
+                  on={tempo === z.value}
+                  onPress={() => setTempo(z.value)}
                   wide
                 />
               ))}
@@ -259,13 +300,39 @@ export function PlannerScreen({ language, pantryCount, onApply, onBack }: Props)
           </Pressable>
 
           <Button
-            label={loading ? 'Sucht bei Albert Heijn…' : 'Woche vorschlagen'}
-            onPress={() => {
-              setRejected([]);
-              void suchen([]);
-            }}
+            label={loading && !vorratModus ? 'Sucht bei Albert Heijn…' : 'Gerichte finden'}
+            onPress={() => starten(false)}
             disabled={loading}
           />
+
+          {/*
+            Der zweite Weg in dieselbe Suche — bewusst ein eigener Knopf und
+            kein Schalter im Formular. Es ist eine andere Frage: „Gerichte
+            finden" heisst „worauf hab ich Lust", „Vorrat aufbrauchen" heisst
+            „was muss weg". Beim zweiten bestimmt der Vorrat, wonach gesucht
+            wird — nicht der Wunsch.
+          */}
+          <Pressable
+            onPress={() => starten(true)}
+            disabled={loading || pantryCount === 0}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: loading || pantryCount === 0 }}
+            style={({ pressed }) => [
+              s.vorratBtn,
+              (pressed || loading) && s.pressed,
+              pantryCount === 0 && s.vorratBtnAus,
+            ]}
+          >
+            <Text style={[s.vorratBtnText, pantryCount === 0 && s.vorratBtnTextAus]}>
+              {loading && vorratModus ? 'Sucht…' : 'Vorrat aufbrauchen'}
+            </Text>
+            <Text style={s.vorratBtnHint}>
+              {pantryCount === 0
+                ? 'Dein Vorrat ist leer — trag erst ein, was du hast.'
+                : `Sucht ein Gericht fuer das, was am laengsten liegt (${pantryCount} ${pantryCount === 1 ? 'Eintrag' : 'Eintraege'})`}
+            </Text>
+          </Pressable>
+
           <Text style={s.dauer}>
             Dauert etwa eine halbe Minute. Jedes Rezept wird einzeln geholt, damit
             Albert Heijn die Anfragen nicht abweist.
@@ -294,7 +361,7 @@ export function PlannerScreen({ language, pantryCount, onApply, onBack }: Props)
             <View style={s.ergebnis}>
               {result.relaxed ? (
                 <Notice tone="warn">
-                  {beschreibeLockerung(result.relaxed, budget, maxMinutes)}
+                  {beschreibeLockerung(result.relaxed, budget, tempo === 'schnell' ? 15 : undefined)}
                 </Notice>
               ) : null}
 
@@ -553,6 +620,28 @@ const s = StyleSheet.create({
   schalterText: { fontSize: 14, color: colors.text },
 
   dauer: { fontSize: 11, color: colors.textFaint, textAlign: 'center', lineHeight: 16 },
+
+  vorratBtn: {
+    minHeight: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
+  },
+  vorratBtnAus: { borderColor: colors.border, backgroundColor: colors.bg },
+  vorratBtnText: {
+    fontFamily: fonts.heading,
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primaryDeep,
+  },
+  vorratBtnTextAus: { color: colors.textFaint },
+  vorratBtnHint: { fontSize: 10.5, color: colors.textMuted, textAlign: 'center' },
 
   laden: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
   ladenText: { fontSize: 12, color: colors.textMuted },

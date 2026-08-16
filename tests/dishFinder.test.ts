@@ -1,25 +1,29 @@
 /**
- * Der Wochenplaner — Filter, Preis-Zwischenablage, Fleischerkennung.
+ * Der Gericht-Finder — Filter, Quellen, Vorrat, Preis-Zwischenablage.
  *
- * Diese Tests entstanden aus einer echten Beschwerde: Der erste Durchlauf
- * lieferte eine Woche für 41,36 € mit **7 % Verwertung**. Die Ursache war
- * nicht der Preis, sondern die Auswahl — Joghurtriegel für zwölf Personen,
- * auf eine heruntergerechnet. Was hier geprüft wird, ist genau das, was
- * damals fehlte.
+ * Diese Tests entstanden aus echten Beschwerden über echte Durchläufe: eine
+ * Woche für 41,36 € bei 7 % Verwertung, später ein einzelnes Gericht für
+ * 12,38 € bei 14 %. Die Ursachen lagen nie im Preis, sondern in der Auswahl
+ * — Joghurtriegel für zwölf Personen, auf eine heruntergerechnet.
  *
- * Kein Netz: `adviseWeek` selbst zieht Seiten von ah.nl und gehört deshalb
+ * Kein Netz: `findDishes` selbst zieht Seiten von ah.nl und gehört deshalb
  * nicht in die Testsuite. Geprüft werden die Entscheidungen, die es trifft.
  */
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { CATEGORIES } from '../server/allerhande';
 import {
   aussortieren,
   istVegetarisch,
   lockerungsStufen,
+  pantryAlsWuensche,
+  quellenFuer,
   withPriceCache,
-} from '../server/weekAdvisor';
+} from '../server/dishFinder';
+import type { PantryItem } from '../src/domain/pantry';
+import { translateSearchQuery } from '../src/domain/searchLanguage';
 import type { Recipe } from '../src/domain/types';
 import type { PriceProvider, SearchResult } from '../src/supermarkets/types';
 
@@ -158,6 +162,99 @@ describe('lockerungsStufen', () => {
     // dem Nutzer eine Chance, knapp darüber zu landen statt beliebig.
     const budgets = lockerungsStufen(undefined, 2).map((s) => s.budget);
     assert.deepEqual(budgets, [2, 3, undefined]);
+  });
+});
+
+/* ── Schnell oder in Ruhe ──────────────────────────────────────────── */
+
+describe('quellenFuer', () => {
+  it('fragt im schnellen Modus zuerst AHs schnelle Rezepte', () => {
+    // Der Grund, warum das nicht bloss ein Zeitfilter ist: Die meisten
+    // Allerhande-Rezepte liegen bei 30 bis 40 Minuten. Ein gemessener Lauf
+    // mit 20 Minuten warf 19 von 20 Kandidaten weg — bei 15 bliebe nichts
+    // uebrig. AHs eigene Auswahl ist die bessere Quelle als ein scharfer
+    // Filter auf beliebigen Rezepten.
+    assert.equal(quellenFuer('schnell')[0], 'snelle-recepten');
+  });
+
+  it('sucht sonst zuerst bei den guenstigen', () => {
+    assert.equal(quellenFuer('egal')[0], 'budget-recepten');
+  });
+
+  it('nennt in beiden Faellen mehrere Quellen', () => {
+    // Eine einzige Quelle liefert immer dieselben neun Rezepte.
+    assert.ok(quellenFuer('schnell').length >= 2);
+    assert.ok(quellenFuer('egal').length >= 2);
+  });
+
+  it('nennt nur Kategorien, die es bei AH wirklich gibt', () => {
+    // Sonst laeuft der Finder ins Leere. Jede Kategorie in CATEGORIES wurde
+    // einzeln gegen ah.nl geprueft — dieser Test verhindert, dass hier ein
+    // ausgedachter Slug einzieht.
+    const bekannt = new Set(CATEGORIES.map((c) => c.slug));
+    for (const modus of ['schnell', 'egal'] as const) {
+      for (const slug of quellenFuer(modus)) {
+        assert.ok(bekannt.has(slug), `${slug} steht nicht in CATEGORIES`);
+      }
+    }
+  });
+});
+
+/* ── Vorrat aufbrauchen ────────────────────────────────────────────── */
+
+describe('pantryAlsWuensche', () => {
+  const eintrag = (name: string, updatedAt: string): PantryItem => ({
+    id: name,
+    name,
+    quantity: { amount: 1, unit: 'Stueck' },
+    updatedAt,
+  });
+
+  /** Attrappe: reicht den Namen klein durch, damit die Reihenfolge sichtbar bleibt. */
+  const durchreichen = (n: string) => n.toLowerCase();
+
+  it('nimmt das Aelteste zuerst — das muss am dringendsten weg', () => {
+    const vorrat = [
+      eintrag('Paprika', '2026-08-14T10:00:00Z'),
+      eintrag('Reis', '2026-08-01T10:00:00Z'),
+      eintrag('Joghurt', '2026-08-10T10:00:00Z'),
+    ];
+    assert.deepEqual(pantryAlsWuensche(vorrat, durchreichen), ['reis', 'joghurt', 'paprika']);
+  });
+
+  it('laesst Vorratsware weg', () => {
+    // Nach einem Rezept fuer Salz zu suchen ist sinnlos — und aufbrauchen
+    // will man Salz auch nicht.
+    const vorrat = [
+      eintrag('Salz', '2026-08-01T10:00:00Z'),
+      eintrag('Oel', '2026-08-02T10:00:00Z'),
+      eintrag('Linsen', '2026-08-03T10:00:00Z'),
+    ];
+    assert.deepEqual(pantryAlsWuensche(vorrat, durchreichen), ['linsen']);
+  });
+
+  it('nimmt hoechstens drei — jeder Begriff kostet eine gedrosselte Anfrage', () => {
+    const vorrat = ['a', 'b', 'c', 'd', 'e'].map((n, i) =>
+      eintrag(n, `2026-08-0${i + 1}T10:00:00Z`),
+    );
+    assert.equal(pantryAlsWuensche(vorrat, durchreichen).length, 3);
+  });
+
+  it('uebersetzt die Namen', () => {
+    // Der Vorrat steht in der Sprache des Nutzers, AH sucht auf
+    // Niederlaendisch. Ohne Uebersetzung findet "Haehnchen" nichts.
+    const vorrat = [eintrag('Hähnchen', '2026-08-01T10:00:00Z')];
+    assert.deepEqual(pantryAlsWuensche(vorrat, (n) => translateSearchQuery(n, 'de')), ['kip']);
+  });
+
+  it('leerer Vorrat ergibt keine Wuensche', () => {
+    assert.deepEqual(pantryAlsWuensche([], durchreichen), []);
+  });
+
+  it('wirft Eintraege weg, die zu nichts uebersetzen', () => {
+    // Ein leerer Suchbegriff wuerde bei AH die ganze Trefferliste ziehen.
+    const vorrat = [eintrag('Linsen', '2026-08-01T10:00:00Z')];
+    assert.deepEqual(pantryAlsWuensche(vorrat, () => '   '), []);
   });
 });
 

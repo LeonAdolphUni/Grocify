@@ -27,7 +27,7 @@ import {
 import { HomeScreen } from './src/screens/HomeScreen';
 import { ImportScreen } from './src/screens/ImportScreen';
 import { PantryScreen } from './src/screens/PantryScreen';
-import { PlannerScreen } from './src/screens/PlannerScreen';
+import { FinderScreen } from './src/screens/FinderScreen';
 import { RecipeDetailScreen } from './src/screens/RecipeDetailScreen';
 import { RecipeEditScreen } from './src/screens/RecipeEditScreen';
 import { RecipeListScreen } from './src/screens/RecipeListScreen';
@@ -460,7 +460,7 @@ export default function App() {
         })()}
 
       {route.name === 'planner' && (
-        <PlannerScreen
+        <FinderScreen
           language={settings.searchLanguage ?? 'de'}
           pantryCount={pantry.length}
           onApply={async (vorschlag, picks) => {

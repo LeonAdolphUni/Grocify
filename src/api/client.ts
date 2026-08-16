@@ -73,8 +73,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-/** Ein Vorschlag des Wochenplaners. */
-export interface AdvisorPick {
+/** Ein gefundenes Gericht. */
+export interface FinderPick {
   hit: ImportHit;
   recipe: Recipe;
   score: number;
@@ -92,8 +92,8 @@ export interface AdvisorPick {
   mealsCovered: number;
 }
 
-export interface AdvisorResult {
-  picks: AdvisorPick[];
+export interface FinderResult {
+  picks: FinderPick[];
   /** Wünsche, für die Allerhande nichts hergab. */
   unmatched: string[];
   /** Wie viele Rezeptseiten geholt wurden. */
@@ -111,14 +111,17 @@ export interface AdvisorResult {
 }
 
 /** Was der Nutzer im Planerformular eingestellt hat. */
-export interface AdvisorForm {
+export interface FinderForm {
   wishes: string[];
   /** Wie viele **Mahlzeiten** — ein Rezept deckt mehrere. */
   meals: number;
   /** Obergrenze je Mahlzeit in Euro. `undefined` heißt „egal". */
   maxPricePerServing?: number;
   vegetarianOnly?: boolean;
-  maxMinutes?: number;
+  /** „schnell" sucht in AHs schnellen Rezepten und deckelt auf 15 Min. */
+  speed?: 'schnell' | 'egal';
+  /** Ein Gericht suchen, das den Vorrat aufbraucht. */
+  useUpPantry?: boolean;
   rejected?: string[];
 }
 
@@ -199,8 +202,8 @@ export const api = {
    * Dauert bewusst lange: Für jeden Kandidaten wird eine Rezeptseite geholt,
    * und die Anfragen sind gedrosselt, damit AH nicht mit 403 antwortet.
    */
-  adviseWeek: (form: AdvisorForm) =>
-    request<AdvisorResult>('/advise-week', {
+  findDishes: (form: FinderForm) =>
+    request<FinderResult>('/find-dishes', {
       method: 'POST',
       body: JSON.stringify(form),
     }),

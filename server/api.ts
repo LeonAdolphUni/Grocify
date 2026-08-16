@@ -26,7 +26,7 @@ import {
   searchRecipes,
 } from './allerhande';
 import { GrocifyDb, PLAN_ID } from './db';
-import { adviseWeek } from './weekAdvisor';
+import { findDishes } from './dishFinder';
 import { AlbertHeijnProvider } from '../src/supermarkets/albertHeijn';
 
 interface Route {
@@ -139,7 +139,7 @@ const ROUTES: Route[] = [
   },
 
   /**
-   * Der Wochenplaner-Vorschlag.
+   * Gerichte finden.
    *
    * POST, obwohl nichts gespeichert wird: Wünsche, Vorrat und Ablehnungen
    * passen nicht sinnvoll in eine URL, und AHs robots.txt-Grenze von einem
@@ -147,7 +147,7 @@ const ROUTES: Route[] = [
    */
   {
     method: 'POST',
-    path: '/api/advise-week',
+    path: '/api/find-dishes',
     handle: async ({ db, body }) => {
       const b = (typeof body === 'object' && body !== null ? body : {}) as {
         wishes?: unknown;
@@ -155,26 +155,30 @@ const ROUTES: Route[] = [
         rejected?: unknown;
         maxPricePerServing?: unknown;
         vegetarianOnly?: unknown;
-        maxMinutes?: unknown;
+        speed?: unknown;
+        useUpPantry?: unknown;
       };
       const meals = Number(b.meals);
       const budget = Number(b.maxPricePerServing);
-      const minuten = Number(b.maxMinutes);
 
-      return adviseWeek({
+      return findDishes({
         wishes: Array.isArray(b.wishes)
           ? b.wishes.filter((w): w is string => typeof w === 'string' && w.trim().length > 0)
           : [],
         // Mahlzeiten, nicht Gerichte — bis 14, weil man mit Vorkochen
         // zweimal am Tag aus demselben Topf essen kann.
-        meals: Number.isFinite(meals) && meals >= 1 && meals <= 14 ? Math.round(meals) : 7,
+        meals: Number.isFinite(meals) && meals >= 1 && meals <= 14 ? Math.round(meals) : 4,
         pantry: db.listPantry(),
         rejected: Array.isArray(b.rejected)
           ? b.rejected.filter((r): r is string => typeof r === 'string')
           : [],
         maxPricePerServing: Number.isFinite(budget) && budget > 0 ? budget : undefined,
         vegetarianOnly: b.vegetarianOnly === true,
-        maxMinutes: Number.isFinite(minuten) && minuten > 0 ? minuten : undefined,
+        speed: b.speed === 'schnell' ? 'schnell' : 'egal',
+        useUpPantry: b.useUpPantry === true,
+        // Die Vorratsnamen stehen in der Sprache, in der der Nutzer sucht —
+        // ohne sie ließen sie sich nicht in AH-Suchbegriffe übersetzen.
+        searchLanguage: db.getSettings().searchLanguage ?? 'de',
         provider: new AlbertHeijnProvider(),
       });
     },

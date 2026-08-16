@@ -318,14 +318,27 @@ Deutsch und Niederländisch sind nah verwandt, also wird „-suppe" zu „-soep"
 und der Stamm getrennt nachgeschlagen. Das greift auch bei Wörtern, die
 niemand eingetragen hat.
 
-## Der Wochenplaner
+## Der Gericht-Finder
 
 Der Planer durchsucht **Allerhande**, nicht das eigene Rezeptbuch. Nur im
 eigenen Buch zu suchen wäre ein Kreis: Man kann planen, was man schon hat,
 und wer acht Rezepte besitzt, bekommt achtmal dieselbe Woche.
 
-Der Ablauf ist ein **Formular**: Wünsche, Anzahl Gerichte, Budget je Portion,
-Zubereitungszeit, vegetarisch ja/nein. Jeder Vorschlag trägt seine Begründung
+Er ist ein **Finder**, kein Wochenplaner: Als Planer musste er eine ganze
+Woche auf einmal füllen und scheiterte, sobald die Filter streng waren — ein
+Lauf mit „7 Gerichte, 20 Min, 2 €" lieferte **ein** Gericht. Als Finder
+beantwortet er die Frage, die man sich abends wirklich stellt: „Was koche
+ich?"
+
+Der Ablauf ist ein **Formular**: Wünsche, Anzahl Mahlzeiten, Budget je
+Mahlzeit, schnell oder in Ruhe, vegetarisch ja/nein. Dazu ein zweiter Knopf,
+**„Vorrat aufbrauchen"** — der dreht die Suchrichtung um: Nicht der Wunsch
+bestimmt, wonach gesucht wird, sondern die ältesten Einträge im Vorrat.
+
+**„Schnell" heißt 15 Minuten** und ist mehr als ein Zeitfilter. Die meisten
+Allerhande-Rezepte liegen bei 30 bis 40 Minuten; ein scharfer Filter fände
+fast nichts. Deshalb wird zusätzlich aus AHs eigener Auswahl schneller
+Rezepte geschöpft (`snelle-recepten`, geprüft: 9 Rezepte). Jeder Vorschlag trägt seine Begründung
 — eine Liste ohne Begründung müsste man glauben, diese kann man prüfen.
 
 **Vorher war es ein Chat, und das war die schlechtere Idee.** Ein Gespräch
@@ -379,6 +392,40 @@ Abzug fuer Reste. Eine Zwischenfassung zog den Restwert ab, damit die
 1-Portionen-Rechnung nicht absurd wurde (sie ergab 42,98 € je Portion). Das
 war ein perverser Anreiz: Es belohnte genau die Gerichte, die viel uebrig
 lassen. Beim Vollkochen braucht es den Kniff nicht mehr.
+
+### Der stumme Ausfall der Vorratsfunktion
+
+**Der schwerste bisher gefundene Fehler in diesem Projekt, und er stand
+nirgends.** Seit die Rezepte aus Allerhande kommen, stehen ihre Zutaten auf
+Niederländisch. Der Vorrat steht in der Sprache, in der der Nutzer tippt.
+Verglichen wurden die Namen — und „Reis" gegen „rijst", „Zwiebel" gegen
+„ui", „Käse" gegen „kaas" sind unähnlich. Gemessen wurde **gar nichts** mehr
+abgezogen, außer bei Zufallstreffern wie „Paprika"/„paprika". Die
+Einkaufsliste kaufte alles doppelt, ohne dass irgendwo eine Warnung stand.
+
+Verglichen wird jetzt zusätzlich über die Suchübersetzung, in beide
+Richtungen — und über die niederländische Grammatik, denn allein die
+Übersetzung reichte nicht:
+
+| im Rezept | im Vorrat | was fehlte |
+|---|---|---|
+| `rode paprika's` | Paprika | Beiwort davor, Apostroph-Plural |
+| `uien` | Zwiebeln | niederländischer Plural von „ui" |
+| `zilvervliesrijst` | Reis | Kompositum — der Kopf steht hinten |
+
+Drei Fallen mussten dabei ausdrücklich abgesichert werden, jede mit Test:
+
+- **„aardappelen" endet auf „appelen".** Ohne Sperre gälten Kartoffeln als
+  von Äpfeln gedeckt.
+- **„zoete aardappelen" sind keine Kartoffeln.** Beiwörter werden nur
+  gestrichen, wenn sie Farbe oder Größe nennen — „zoete", „gedroogde" und
+  „gerookte" ändern die Zutat und bleiben stehen.
+- **„Eis" ist kein Plural von „Ei".** Die niederländische `-s`-Regel darf
+  nicht auf deutsche Wörter durchschlagen; die Mindestlänge gilt deshalb je
+  Endung, damit `uien` → `ui` erlaubt bleibt und `Eis` → `Ei` nicht.
+
+Gemessen an einem echten Lauf mit Reis, Zwiebeln und Paprika im Vorrat:
+Vorratsdeckung **0 % → 20 %**, Preis **3,36 € → 2,84 €** je Mahlzeit.
 
 ### Weiche und harte Grenzen
 

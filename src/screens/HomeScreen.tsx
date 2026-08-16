@@ -1,7 +1,7 @@
 /**
  * Startbildschirm.
  *
- * Zwei Wege, mehr braucht es nicht: die Woche planen oder Rezepte pflegen.
+ * Zwei Wege, mehr braucht es nicht: ein Gericht finden oder Rezepte pflegen.
  *
  * Der Bildschirm ist bewusst der Ort, an dem die Gestaltung am meisten
  * Raum bekommt — hier landet man jedes Mal, hier entscheidet sich, ob die
@@ -147,17 +147,17 @@ export function HomeScreen({
           </View>
         ) : null}
 
-        {/* Der Helfer sitzt vor den beiden Wegen: Wer nicht weiß, was er
+        {/* Der Finder sitzt vor den beiden Wegen: Wer nicht weiß, was er
             kochen will, soll nicht erst durch den leeren Wochenplan. */}
         <Pressable
           onPress={onOpenPlanner}
           style={({ pressed }) => [s.plannerTile, pressed && s.pressed]}
         >
           <View style={s.plannerBody}>
-            <Text style={s.plannerTitle}>Woche planen lassen</Text>
+            <Text style={s.plannerTitle}>Gericht finden</Text>
             <Text style={s.plannerSub}>
-              Sag, worauf du Lust hast — der Helfer sucht Gerichte, die sich Zutaten
-              teilen und deinen Vorrat nutzen
+              Schnell oder in Ruhe, günstig und gesund — oder etwas, das deinen
+              Vorrat aufbraucht
             </Text>
           </View>
           <ChevronIcon size={18} color={colors.onDark} />
