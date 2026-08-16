@@ -151,13 +151,13 @@ const ROUTES: Route[] = [
     handle: async ({ db, body }) => {
       const b = (typeof body === 'object' && body !== null ? body : {}) as {
         wishes?: unknown;
-        days?: unknown;
+        meals?: unknown;
         rejected?: unknown;
         maxPricePerServing?: unknown;
         vegetarianOnly?: unknown;
         maxMinutes?: unknown;
       };
-      const days = Number(b.days);
+      const meals = Number(b.meals);
       const budget = Number(b.maxPricePerServing);
       const minuten = Number(b.maxMinutes);
 
@@ -165,15 +165,13 @@ const ROUTES: Route[] = [
         wishes: Array.isArray(b.wishes)
           ? b.wishes.filter((w): w is string => typeof w === 'string' && w.trim().length > 0)
           : [],
-        days: Number.isFinite(days) && days >= 1 && days <= 7 ? Math.round(days) : 5,
+        // Mahlzeiten, nicht Gerichte — bis 14, weil man mit Vorkochen
+        // zweimal am Tag aus demselben Topf essen kann.
+        meals: Number.isFinite(meals) && meals >= 1 && meals <= 14 ? Math.round(meals) : 7,
         pantry: db.listPantry(),
         rejected: Array.isArray(b.rejected)
           ? b.rejected.filter((r): r is string => typeof r === 'string')
           : [],
-        // Die Portionsgröße kommt aus den Einstellungen, nicht aus dem
-        // Formular: Sie gilt für die ganze App, und zwei Orte für dieselbe
-        // Zahl wären zwei Gelegenheiten, sie unterschiedlich zu setzen.
-        servings: db.getSettings().servingsPerMeal,
         maxPricePerServing: Number.isFinite(budget) && budget > 0 ? budget : undefined,
         vegetarianOnly: b.vegetarianOnly === true,
         maxMinutes: Number.isFinite(minuten) && minuten > 0 ? minuten : undefined,

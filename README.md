@@ -351,24 +351,45 @@ Begründung, echte Preise kosteten zu viele Anfragen. Das war falsch — die
 Rezeptseiten liegen auf `www.ah.nl` und sind gedrosselt, die Produktsuche
 läuft über `api.ah.nl` und ist es nicht.
 
-### Der Preis je Portion, richtig gerechnet
+### Mahlzeiten, nicht Gerichte
 
-Die naive Rechnung war ebenfalls falsch, und zwar spektakulär: Sie ergab
-**42,98 € je Portion** für ein Hähnchengericht. Wer ein Vier-Personen-Rezept
-auf eine Person kocht, kauft trotzdem die ganze Packung Hähnchen und das ganze
-Glas Senf — und der volle Einkauf wurde der einen Portion angelastet. Bei
-dieser Rechnung war jedes Gericht zu teuer, und ein Budgetfilter leerte die
-Woche vollständig.
+**Der teuerste Fehler saß im Modell, nicht im Code.** Ein Lauf mit „7
+Gerichte, hoechstens 20 Min, hoechstens 2 €" lieferte **ein** Gericht fuer
+12,38 € bei **14 % Verwertung**. Man kauft eine ganze Packung Hackfleisch,
+eine ganze Packung Fusilli, eine ganze Sauce — und isst ein Viertel davon.
 
-Die drei übrigen Portionen sind aber nicht weg, sie liegen im Kühlschrank.
-Gerechnet wird deshalb **Einkauf minus Restwert**, geteilt durch die
-Portionen. Damit der Rest nicht zur Ausrede wird, steht die **Verwertung als
-eigene Regel** daneben: Ein Gericht, dessen Rest niemand mehr isst, soll nicht
-dadurch gut dastehen, dass man den Rest herausrechnet.
+Ein Rezept fuer vier Portionen ist fuer eine Person kein Abendessen,
+sondern **vier**: einmal kochen, viermal essen. Der Planer rechnet deshalb
+nicht mehr auf eine Portion herunter, sondern kocht in voller Groesse und
+zaehlt die Portionen als Mahlzeiten. Derselbe Lauf, live gemessen:
 
-Ein Budget, unter dem nichts zu finden ist, wird **gelockert statt
-durchgesetzt** — mit sichtbarem Hinweis. Eine leere Woche sagt nur „nein",
-ein zu teurer Vorschlag sagt, was es kosten würde.
+| | vorher | nachher |
+|---|---|---|
+| Einkauf | 12,38 € | 15,94 € |
+| Mahlzeiten | 1 | **8** |
+| je Mahlzeit | 12,38 € | **1,99 €** |
+| verkocht | 14 % | **95 %** |
+
+Im Wochenplan steht jedes Rezept trotzdem nur **einmal**, auf dem Kochtag.
+`recipesInPlan` dedupliziert bewusst nicht — zweimal geplant heisst zweimal
+einkaufen —, vier Eintraege wuerden also den vierfachen Einkauf erzeugen.
+
+Der Preis je Mahlzeit ist seither **Einkauf geteilt durch Portionen**, ohne
+Abzug fuer Reste. Eine Zwischenfassung zog den Restwert ab, damit die
+1-Portionen-Rechnung nicht absurd wurde (sie ergab 42,98 € je Portion). Das
+war ein perverser Anreiz: Es belohnte genau die Gerichte, die viel uebrig
+lassen. Beim Vollkochen braucht es den Kniff nicht mehr.
+
+### Weiche und harte Grenzen
+
+Zeit und Budget sind **weich**. Reicht es nicht, wird stufenweise gelockert
+— erst die Zeit, dann das Geld —, und im Ergebnis steht, was nachgegeben
+hat. Zwanzig Minuten sind bei Allerhande hart: Die meisten Rezepte liegen
+bei 30 bis 40, im gemessenen Lauf fielen 19 von 20 Kandidaten den Filtern
+zum Opfer. Ein einzelnes Gericht ist keine Antwort auf „plan mir die Woche".
+
+**Vegetarisch wird nie gelockert.** Zeit und Geld sind Wuensche, eine
+Ernaehrungsweise ist keiner.
 
 ### Anfragen sind gedrosselt
 

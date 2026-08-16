@@ -17,7 +17,7 @@ import { describe, it } from 'node:test';
 import {
   aussortieren,
   istVegetarisch,
-  verbrauchterWert,
+  lockerungsStufen,
   withPriceCache,
 } from '../server/weekAdvisor';
 import type { Recipe } from '../src/domain/types';
@@ -111,26 +111,53 @@ describe('aussortieren — Kategorie', () => {
   });
 });
 
-/* ── Zeit ──────────────────────────────────────────────────────────── */
+/* ── Stufenweise lockern ───────────────────────────────────────────── */
 
-describe('aussortieren — Zubereitungszeit', () => {
-  it('hält die Obergrenze ein', () => {
-    const r = importiert(rezept('Schmorbraten', ['ui']), { totalMinutes: 120 });
-    assert.equal(aussortieren(r, { vegetarianOnly: false, maxMinutes: 30 }), '120 Min');
+describe('lockerungsStufen', () => {
+  it('beginnt immer mit dem, was der Nutzer wollte', () => {
+    // Die gewünschte Einstellung muss die erste sein — sonst bekäme er
+    // gelockerte Ergebnisse, obwohl strenge möglich gewesen wären.
+    assert.deepEqual(lockerungsStufen(20, 2)[0], { minutes: 20, budget: 2 });
   });
 
-  it('ohne Obergrenze ist jede Dauer recht', () => {
-    const r = importiert(rezept('Schmorbraten', ['ui']), { totalMinutes: 120 });
-    assert.equal(aussortieren(r, { vegetarianOnly: false }), null);
-  });
+  it('lockert erst die Zeit, dann das Geld', () => {
+    // Zwanzig Minuten sind bei Allerhande hart — die meisten Rezepte
+    // liegen bei 30 bis 40. Zehn Minuten mehr öffnen das Feld, ohne dass
+    // es teurer wird. Am Budget zu rütteln kostet dagegen sofort Geld.
+    const stufen = lockerungsStufen(20, 2);
+    const budgets = stufen.map((s) => s.budget);
+    const zeiten = stufen.map((s) => s.minutes);
 
-  it('ein Rezept ohne Zeitangabe wird nicht dafür bestraft', () => {
-    // Fehlende Angabe ist keine lange Zubereitung. Wer sie so behandelt,
-    // wirft alle Rezepte weg, bei denen AH die Zeit vergessen hat.
-    assert.equal(
-      aussortieren(importiert(rezept('X', ['ui'])), { vegetarianOnly: false, maxMinutes: 20 }),
-      null,
+    // Die Zeit ist schon frei, bevor sich am Budget etwas ändert.
+    const ersteZeitLockerung = zeiten.findIndex((z) => z !== 20);
+    const ersteGeldLockerung = budgets.findIndex((b) => b !== 2);
+    assert.ok(
+      ersteZeitLockerung < ersteGeldLockerung,
+      'Zeit muss vor dem Budget gelockert werden',
     );
+  });
+
+  it('endet ohne jede Grenze', () => {
+    const letzte = lockerungsStufen(20, 2).at(-1);
+    assert.deepEqual(letzte, { minutes: undefined, budget: undefined });
+  });
+
+  it('erfindet keine Stufen, wenn nichts zu lockern ist', () => {
+    // Ohne Grenzen gibt es nur einen Durchlauf — alles andere wäre
+    // dieselbe Auswahl noch einmal.
+    assert.equal(lockerungsStufen(undefined, undefined).length, 1);
+  });
+
+  it('lockert nur, was gesetzt ist', () => {
+    for (const s of lockerungsStufen(undefined, 3)) assert.equal(s.minutes, undefined);
+    for (const s of lockerungsStufen(30, undefined)) assert.equal(s.budget, undefined);
+  });
+
+  it('hebt das Budget um die Hälfte, bevor es ganz fällt', () => {
+    // Ein Sprung von 2 € auf „egal" wäre grob. Die Zwischenstufe gibt
+    // dem Nutzer eine Chance, knapp darüber zu landen statt beliebig.
+    const budgets = lockerungsStufen(undefined, 2).map((s) => s.budget);
+    assert.deepEqual(budgets, [2, 3, undefined]);
   });
 });
 
@@ -165,40 +192,6 @@ describe('istVegetarisch', () => {
     const fleisch = importiert(rezept('X', ['kipfilet']));
     assert.equal(aussortieren(fleisch, { vegetarianOnly: false }), null);
     assert.equal(aussortieren(fleisch, { vegetarianOnly: true }), 'nicht vegetarisch');
-  });
-});
-
-/* ── Was eine Portion wirklich kostet ──────────────────────────────── */
-
-describe('verbrauchterWert', () => {
-  it('rechnet den Rest heraus statt ihn der Mahlzeit anzulasten', () => {
-    // Der gemessene Fall: „Kip in romige mosterdsaus" auf eine Person. Man
-    // kauft für 43 € ein, verkocht davon aber nur einen Bruchteil — der
-    // Rest liegt im Kühlschrank und ist kein verlorenes Geld.
-    assert.equal(verbrauchterWert(43, 35, 1), 8);
-  });
-
-  it('ohne Rest ist der Preis der volle Einkauf', () => {
-    assert.equal(verbrauchterWert(12, 0, 4), 3);
-  });
-
-  it('teilt durch die Portionen', () => {
-    assert.equal(verbrauchterWert(20, 8, 4), 3);
-  });
-
-  it('wird nie negativ', () => {
-    // Der Restwert ist anteilig geschätzt und kann die Summe rechnerisch
-    // übersteigen. Ein negativer Preis wäre Unsinn und würde in der
-    // Bewertung als bestmögliches Gericht durchgehen.
-    assert.equal(verbrauchterWert(10, 12, 1), 0);
-  });
-
-  it('ohne Portionen gibt es keinen Preis je Portion', () => {
-    assert.equal(verbrauchterWert(10, 2, 0), null);
-  });
-
-  it('rundet auf Cent', () => {
-    assert.equal(verbrauchterWert(10, 0, 3), 3.33);
   });
 });
 

@@ -88,6 +88,8 @@ export interface AdvisorPick {
   pricePerServing?: number;
   /** Anteil des Gekauften, der bei diesem Gericht verkocht wird. */
   utilization?: number;
+  /** Wie viele Mahlzeiten dieses Rezept ergibt. */
+  mealsCovered: number;
 }
 
 export interface AdvisorResult {
@@ -102,15 +104,18 @@ export interface AdvisorResult {
   totalUtilization?: number;
   /** Was aussortiert wurde und warum. */
   filtered: { title: string; reason: string }[];
-  /** Das Budget ließ sich nicht halten — der Vorschlag liegt darüber. */
-  budgetRelaxed?: boolean;
+  /** Welche weichen Grenzen gelockert werden mussten, und worauf. */
+  relaxed?: { minutes?: number; budget?: number };
+  /** Wie viele Mahlzeiten zusammengekommen sind. */
+  mealsCovered: number;
 }
 
 /** Was der Nutzer im Planerformular eingestellt hat. */
 export interface AdvisorForm {
   wishes: string[];
-  days: number;
-  /** Obergrenze je Portion in Euro. `undefined` heißt „egal". */
+  /** Wie viele **Mahlzeiten** — ein Rezept deckt mehrere. */
+  meals: number;
+  /** Obergrenze je Mahlzeit in Euro. `undefined` heißt „egal". */
   maxPricePerServing?: number;
   vegetarianOnly?: boolean;
   maxMinutes?: number;

@@ -34,7 +34,6 @@ import { browseCategory, importRecipe, searchRecipes, type RecipeHit } from './a
 import { newId } from '../src/domain/id';
 import type { PantryItem } from '../src/domain/pantry';
 import { deductFromPantry } from '../src/domain/pantry';
-import { scaleRecipe } from '../src/domain/portions';
 import { buildShoppingList } from '../src/domain/shoppingList';
 import { isPantryStaple } from '../src/domain/translate';
 import { calculateStats, type Recipe } from '../src/domain/types';
@@ -43,27 +42,35 @@ import type { PriceProvider, SearchOptions, SearchResult } from '../src/supermar
 export interface AdvisorRequest {
   /** Worauf hast du Lust — schon auf Niederländisch übersetzt. */
   wishes: string[];
-  /** Wie viele Gerichte gebraucht werden. */
-  days: number;
+  /**
+   * Wie viele **Mahlzeiten** gebraucht werden — nicht wie viele Rezepte.
+   *
+   * Der Unterschied ist der Kern dieser Datei. Ein Rezept für vier
+   * Portionen ist für eine Person kein Abendessen, sondern **vier**: Man
+   * kocht einmal und isst viermal. Wer stattdessen jedes Rezept auf eine
+   * Portion herunterrechnet, kauft trotzdem die ganze Packung und wirft
+   * drei Viertel weg — gemessen 12,38 € Einkauf für 1,75 € Essen.
+   */
+  meals: number;
   pantry: PantryItem[];
   /** Rezepte, die der Nutzer schon abgelehnt hat. */
   rejected?: string[];
   /**
-   * Auf wie viele Portionen gerechnet wird. Bestimmt den Preis je Portion
-   * und damit die Auswahl — bei einer Portion fällt anders aus, was
-   * „günstig" heißt, als bei vieren.
-   */
-  servings?: number;
-  /**
-   * Obergrenze für den Preis je Portion, in Euro.
+   * Obergrenze für den Preis je Mahlzeit, in Euro.
    *
-   * `undefined` heißt „kein Limit" — dann wird der Preis nur gewichtet,
-   * nicht als Ausschluss verwendet.
+   * **Weiche Grenze.** Bleibt darunter zu wenig übrig, wird sie gelockert
+   * statt die Woche leer zu lassen — siehe `relaxed`.
    */
   maxPricePerServing?: number;
-  /** Nur fleischlose Gerichte vorschlagen. */
+  /**
+   * Nur fleischlose Gerichte vorschlagen.
+   *
+   * **Harte Grenze, wird nie gelockert.** Zeit und Geld sind Wünsche, eine
+   * Ernährungsweise ist keiner — wer vegetarisch angibt, will kein Hähnchen
+   * vorgeschlagen bekommen, auch nicht als Notlösung.
+   */
   vegetarianOnly?: boolean;
-  /** Höchste Zubereitungszeit in Minuten. */
+  /** Höchste Zubereitungszeit in Minuten. Weiche Grenze, siehe `relaxed`. */
   maxMinutes?: number;
   /** Der Anbieter, bei dem die Preise geholt werden. Tests reichen einen eigenen. */
   provider?: PriceProvider;
@@ -80,16 +87,20 @@ export interface AdvisorPick {
   pantryShare: number;
   totalMinutes?: number;
   /**
-   * Was das Gericht allein gekauft kostet, je Portion.
+   * Was eine Mahlzeit kostet: Einkauf geteilt durch die Portionen, die das
+   * Rezept ergibt.
    *
-   * Bewusst „allein": Im Wochenverbund wird es billiger, weil Packungen
-   * geteilt werden. Als Rangfolge ist die Einzelrechnung trotzdem richtig —
-   * sie bestraft genau die Gerichte, die ein 7-€-Glas für einen Teelöffel
-   * aufmachen. Der ehrliche Wochenpreis steht in `totalPrice`.
+   * Bewusst **ohne** Abzug für Reste. Eine frühere Fassung zog den Restwert
+   * ab, damit die 1-Portionen-Rechnung nicht absurd wurde. Das war ein
+   * perverser Anreiz: Es belohnte genau die Gerichte, die viel übrig
+   * lassen. Seit in voller Größe gekocht wird, braucht es den Kniff nicht
+   * mehr — und ohne ihn zeigt die Zahl, was man wirklich zahlt.
    */
   pricePerServing?: number;
   /** Anteil des Gekauften, der bei diesem Gericht wirklich verkocht wird. */
   utilization?: number;
+  /** Wie viele Mahlzeiten dieses Rezept ergibt — seine Portionszahl. */
+  mealsCovered: number;
 }
 
 export interface AdvisorResult {
@@ -116,13 +127,15 @@ export interface AdvisorResult {
    */
   filtered: { title: string; reason: string }[];
   /**
-   * Das Budget musste fallengelassen werden, weil sonst nichts übrig blieb.
+   * Welche weichen Grenzen gelockert werden mussten, und worauf.
    *
    * Muss dem Nutzer gesagt werden. Ein Vorschlag, der stillschweigend über
-   * der gesetzten Grenze liegt, ist schlimmer als einer, der sie überschreitet
-   * und es dazusagt.
+   * der gesetzten Grenze liegt, ist schlimmer als einer, der sie
+   * überschreitet und es dazusagt.
    */
-  budgetRelaxed?: boolean;
+  relaxed?: { minutes?: number; budget?: number };
+  /** Wie viele Mahlzeiten zusammengekommen sind. */
+  mealsCovered: number;
 }
 
 /**
@@ -319,38 +332,6 @@ function echteZutaten(recipe: Recipe) {
 }
 
 /**
- * Was eine Portion wirklich kostet — Einkauf minus das, was übrig bleibt.
- *
- * **Der Unterschied ist gewaltig, und die naive Rechnung war falsch.** Eine
- * Messung an „Kip in romige mosterdsaus", auf eine Person gerechnet, ergab
- * **42,98 € je Portion**: Für ein Viertel Rezept kauft man trotzdem die
- * ganze Packung Hähnchen, das ganze Glas Senf, die ganze Sahne — und der
- * volle Einkauf wurde der einen Portion angelastet. Bei dieser Rechnung
- * war *jedes* Gericht zu teuer, und das Budgetfilter leerte die Woche
- * vollständig.
- *
- * Die drei übrigen Portionen sind aber nicht weg, sie liegen im
- * Kühlschrank. Genau dafür hat die App einen Vorrat, und genau darauf
- * schaut der Planer beim nächsten Vorschlag. Der Rest ist also kein
- * verlorenes Geld, sondern gebundenes — er gehört nicht in den Preis
- * dieser Mahlzeit.
- *
- * ⚠️ Die Rechnung stimmt nur, solange der Rest wirklich verbraucht wird.
- * Deshalb steht die Verwertung als **eigene** Regel neben dem Preis: Ein
- * Gericht, dessen Rest niemand mehr isst, soll nicht dadurch gut dastehen,
- * dass man den Rest herausrechnet.
- */
-export function verbrauchterWert(
-  total: number,
-  leftoverValue: number,
-  servings: number,
-): number | null {
-  if (servings <= 0) return null;
-  const verbraucht = Math.max(0, total - leftoverValue);
-  return Math.round((verbraucht / servings) * 100) / 100;
-}
-
-/**
  * Prüft, ob ein Rezept als Wochengericht taugt.
  *
  * Gibt den Grund im Klartext zurück, nicht nur `true`/`false` — der Nutzer
@@ -359,17 +340,49 @@ export function verbrauchterWert(
  */
 export function aussortieren(
   imported: Awaited<ReturnType<typeof importRecipe>>,
-  opts: { vegetarianOnly: boolean; maxMinutes?: number },
+  opts: { vegetarianOnly: boolean },
 ): string | null {
-  const { recipe, category, totalMinutes } = imported;
+  const { recipe, category } = imported;
 
   if (category && KEINE_HAUPTGERICHTE.has(category)) return `kein Hauptgericht (${category})`;
   if (recipe.servings > MAX_PORTIONEN) return `für ${recipe.servings} Portionen`;
   if (opts.vegetarianOnly && !istVegetarisch(recipe)) return 'nicht vegetarisch';
-  if (opts.maxMinutes !== undefined && totalMinutes !== undefined && totalMinutes > opts.maxMinutes)
-    return `${totalMinutes} Min`;
 
   return null;
+}
+
+/**
+ * Die Lockerungsstufen, in der Reihenfolge, in der nachgegeben wird.
+ *
+ * **Warum überhaupt.** Ein echter Lauf mit „7 Gerichte, höchstens 20 Min,
+ * höchstens 2 €" lieferte **ein** Gericht: 19 von 20 Kandidaten fielen den
+ * Filtern zum Opfer. Ein einzelnes Gericht ist keine Antwort auf „plan mir
+ * die Woche".
+ *
+ * **Erst die Zeit, dann das Geld.** Zwanzig Minuten sind bei Allerhande
+ * eine harte Grenze — die meisten Rezepte liegen bei 30 bis 40. Zehn
+ * Minuten mehr öffnen das Feld weit, ohne dass es teurer wird. Am Budget
+ * zu rütteln kostet dagegen sofort Geld, also kommt es zuletzt.
+ *
+ * Vegetarisch steht bewusst in keiner Stufe: Das ist keine Bequemlichkeit,
+ * an der man sparen kann.
+ */
+export function lockerungsStufen(
+  maxMinutes: number | undefined,
+  budget: number | undefined,
+): { minutes?: number; budget?: number }[] {
+  const stufen: { minutes?: number; budget?: number }[] = [{ minutes: maxMinutes, budget }];
+
+  if (maxMinutes !== undefined) {
+    stufen.push({ minutes: maxMinutes + 15, budget });
+    stufen.push({ minutes: undefined, budget });
+  }
+  if (budget !== undefined) {
+    const zuletzt = stufen[stufen.length - 1].minutes;
+    stufen.push({ minutes: zuletzt, budget: Math.round(budget * 1.5 * 100) / 100 });
+    stufen.push({ minutes: zuletzt, budget: undefined });
+  }
+  return stufen;
 }
 
 /**
@@ -382,10 +395,9 @@ export function aussortieren(
 export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
   const {
     wishes,
-    days,
+    meals,
     pantry,
     rejected = [],
-    servings = 1,
     maxPricePerServing,
     vegetarianOnly = false,
     maxMinutes,
@@ -426,7 +438,7 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
   }
 
   if (kandidaten.length === 0) {
-    return { picks: [], unmatched, fetched: 0, filtered };
+    return { picks: [], unmatched, fetched: 0, filtered, mealsCovered: 0 };
   }
 
   // ── Schritt 2: Details holen, begrenzt ─────────────────────────────
@@ -434,11 +446,13 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
   // gedeckelt, weil jeder Abruf eine Sekunde kostet.
   // Reihum aus jedem Wunsch schöpfen statt der Reihe nach: Sonst wären bei
   // zwei Wünschen und acht Abrufen alle acht aus dem ersten.
-  // Großzügiger holen als früher: Der Portions- und Kategoriefilter wirft
-  // einen Teil weg, und was übrig bleibt, muss immer noch für `days`
-  // Vorschläge reichen. Ohne den Aufschlag käme bei einer snackreichen
-  // Kategorie am Ende nur die Hälfte der Woche zustande.
-  const zuHolen = verschraenken(kandidaten, Math.min(MAX_ABRUFE, Math.max(days * 4, 10)));
+  // Wie viele Rezepte für `meals` Mahlzeiten überhaupt gebraucht werden,
+  // ist nicht `meals`: Ein Rezept deckt mehrere. Bei durchschnittlich vier
+  // Portionen reichen für sieben Mahlzeiten zwei bis drei Gerichte. Geholt
+  // wird trotzdem großzügiger, damit es etwas auszuwählen gibt und die
+  // Filter nicht alles wegnehmen.
+  const grobBenoetigt = Math.ceil(meals / 3);
+  const zuHolen = verschraenken(kandidaten, Math.min(MAX_ABRUFE, Math.max(grobBenoetigt * 5, 12)));
   const geholt: {
     hit: RecipeHit;
     wunsch: string | null;
@@ -449,7 +463,7 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
     // Genug Brauchbares beisammen — jeder weitere Abruf kostet eine
     // Sekunde Wartezeit für einen Kandidaten, der ohnehin nicht mehr
     // gebraucht wird.
-    if (geholt.length >= Math.max(days * 2, 6)) break;
+    if (geholt.length >= Math.max(grobBenoetigt * 3, 8)) break;
 
     let imported: Awaited<ReturnType<typeof importRecipe>>;
     try {
@@ -459,7 +473,10 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
       continue;
     }
 
-    const grund = aussortieren(imported, { vegetarianOnly, maxMinutes });
+    // Nur die **harten** Filter. Zeit und Budget entscheiden erst bei der
+    // Auswahl, damit sich beide lockern lassen, ohne noch einmal zwanzig
+    // Seiten zu holen.
+    const grund = aussortieren(imported, { vegetarianOnly });
     if (grund) {
       filtered.push({ title: imported.recipe.title, reason: grund });
       continue;
@@ -469,9 +486,16 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
   }
 
   // ── Schritt 2b: Preise holen ───────────────────────────────────────
+  //
+  // **In voller Rezeptgröße, nicht auf eine Portion heruntergerechnet.**
+  // Das ist der ganze Unterschied: Ein Rezept für vier gekocht kostet
+  // dasselbe wie dasselbe Rezept „für einen" — man kauft in beiden Fällen
+  // die ganze Packung. Nur ergibt das eine vier Mahlzeiten und das andere
+  // eine. Gemessen: 12,38 € Einkauf bei 14 % Verwertung gegen dieselben
+  // 12,38 € bei knapp 90 %.
+  //
   // Läuft über api.ah.nl und ist damit **nicht** gedrosselt — anders als
-  // die Rezeptseiten. Alle Kandidaten parallel, mit gemeinsamer
-  // Zwischenablage: „ui" wird einmal gesucht, nicht zwölfmal.
+  // die Rezeptseiten.
   const preisJePortion = new Map<string, { price: number; utilization?: number }>();
   if (preise) {
     await nacheinander(
@@ -479,14 +503,11 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
       PREIS_GLEICHZEITIG,
       async ({ hit, imported }) => {
         try {
-          const liste = await buildShoppingList([scaleRecipe(imported.recipe, servings)], preise, {
-            pantry,
-          });
+          const liste = await buildShoppingList([imported.recipe], preise, { pantry });
           const st = calculateStats(liste);
-          const preis = verbrauchterWert(st.total, st.leftoverValue, servings);
-          if (preis !== null) {
+          if (st.pricePerServing !== null) {
             preisJePortion.set(hit.id, {
-              price: preis,
+              price: st.pricePerServing,
               utilization: st.utilization ?? undefined,
             });
           }
@@ -501,17 +522,15 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
 
   // ── Schritt 3: gierig auswählen ────────────────────────────────────
   //
-  // Als Funktion, weil sie unter Umständen zweimal laufen muss: Ein zu
-  // knappes Budget kann alles aussieben, und eine leere Woche ist die
-  // schlechteste aller Antworten. Dann wird ohne Budget erneut gewählt und
-  // dem Nutzer gesagt, dass seine Grenze nicht zu halten war.
-  const waehlen = (budget: number | undefined): AdvisorPick[] => {
+  // Als Funktion, weil sie mehrfach mit gelockerten Grenzen laufen kann.
+  const waehlen = (grenze: { minutes?: number; budget?: number }): AdvisorPick[] => {
   const picks: AdvisorPick[] = [];
   const imKorb = new Set<string>();
   const abgedeckteWuensche = new Set<string>();
   let verbleibenderVorrat = pantry;
+  let gedeckteMahlzeiten = 0;
 
-  while (picks.length < days && geholt.length > picks.length) {
+  while (gedeckteMahlzeiten < meals && geholt.length > picks.length) {
     let best: AdvisorPick | null = null;
     let bestIndex = -1;
 
@@ -519,6 +538,12 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
       if (picks.some((p) => p.hit.id === k.hit.id)) return;
 
       const { recipe, nutrition, totalMinutes } = k.imported;
+
+      // Weiche Grenzen — hier und nicht beim Holen, damit Lockern nichts
+      // kostet.
+      if (grenze.minutes !== undefined && totalMinutes !== undefined && totalMinutes > grenze.minutes)
+        return;
+
       const zutaten = echteZutaten(recipe);
       const reasons: string[] = [];
       let score = 0;
@@ -540,15 +565,18 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
       // soll nicht dafür bestraft werden, dass die Produktsuche versagt hat.
       const p = preisJePortion.get(k.hit.id);
       if (p) {
-        const guenstig = Math.max(0, Math.min(1, (6 - p.price) / 4.5));
+        // Studentischer Maßstab: 1,50 € je Mahlzeit ist volle Punktzahl,
+        // ab 5 € gibt es nichts mehr.
+        const guenstig = Math.max(0, Math.min(1, (5 - p.price) / 3.5));
         score += 3.0 * guenstig;
-        reasons.push(`${p.price.toFixed(2).replace('.', ',')} € je Portion`);
+        reasons.push(`${p.price.toFixed(2).replace('.', ',')} € je Mahlzeit`);
 
-        // Verwertung als eigene Regel, nicht nur über den Preis: Ein
+        // Verwertung als **eigene** Regel und schwer gewichtet: Der Nutzer
+        // hat ausdrücklich verlangt, dass keine Reste übrig bleiben. Ein
         // billiges Gericht, das ein 400-g-Glas für zwei Löffel aufmacht,
-        // hinterlässt Reste, die nächste Woche niemand isst.
+        // erfüllt das nicht.
         if (p.utilization !== undefined) {
-          score += 1.2 * p.utilization;
+          score += 2.2 * p.utilization;
           if (p.utilization >= 0.7) reasons.push(`${Math.round(p.utilization * 100)} % verwertet`);
         }
       }
@@ -559,13 +587,24 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
       score += 1.0 * wenig;
       if (zutaten.length <= 7) reasons.push(`nur ${zutaten.length} Zutaten`);
 
-      // Günstig, Teil 2: Überschneidung mit dem schon Gewählten.
+      // Überschneidung mit dem schon Gewählten — **die stärkste Regel nach
+      // dem Preis.** Genau darum ging es dem Nutzer: Gerichte, die
+      // zusammenpassen, sodass eine Packung Reis für zwei Rezepte reicht
+      // und nichts liegen bleibt. Wer siebenmal dieselbe Packung anbricht,
+      // zahlt sie einmal und wirft nichts weg.
       const schluessel = zutaten.map((z) => z.id);
       const gemeinsam = schluessel.filter((x) => imKorb.has(x)).length;
       if (zutaten.length > 0 && gemeinsam > 0) {
-        score += 1.8 * (gemeinsam / zutaten.length);
+        score += 2.8 * (gemeinsam / zutaten.length);
         reasons.push(`teilt ${gemeinsam} ${gemeinsam === 1 ? 'Zutat' : 'Zutaten'}`);
       }
+
+      // Passt die Portionszahl zum Rest der Woche? Ein Rezept für sechs,
+      // wenn noch zwei Mahlzeiten fehlen, lässt vier Portionen übrig — das
+      // ist dasselbe Problem wie zu große Packungen, nur eine Ebene höher.
+      const fehlend = meals - gedeckteMahlzeiten;
+      const ueberschuss = Math.max(0, recipe.servings - fehlend);
+      score -= 0.5 * Math.min(2, ueberschuss);
 
       // Vorrat — gegen den verbleibenden, damit nichts doppelt zählt.
       const gedeckt = zutaten.filter(
@@ -591,10 +630,8 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
         reasons.push(`${totalMinutes} Min`);
       }
 
-      // Budget als harte Grenze, wenn der Nutzer eine gesetzt hat. Bewusst
-      // erst hier und nicht beim Holen: Ohne Preis kein Urteil, und der
-      // Preis steht erst nach dem Import fest.
-      if (budget !== undefined && p && p.price > budget) return;
+      // Budget — ebenfalls weich, siehe `lockerungsStufen`.
+      if (grenze.budget !== undefined && p && p.price > grenze.budget) return;
 
       const kandidat: AdvisorPick = {
         hit: k.hit,
@@ -608,6 +645,7 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
         totalMinutes,
         pricePerServing: p?.price,
         utilization: p?.utilization,
+        mealsCovered: recipe.servings,
       };
 
       if (!best || kandidat.score > best.score) {
@@ -620,6 +658,7 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
 
     const gewaehlt: AdvisorPick = best;
     picks.push(gewaehlt);
+    gedeckteMahlzeiten += gewaehlt.mealsCovered;
     for (const z of echteZutaten(gewaehlt.recipe)) imKorb.add(z.id);
     const quelle = geholt[bestIndex]?.wunsch;
     if (quelle) abgedeckteWuensche.add(quelle);
@@ -629,16 +668,25 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
     return picks;
   };
 
-  let picks = waehlen(maxPricePerServing);
+  // Stufenweise lockern, bis die Mahlzeiten zusammenkommen. Ein einzelnes
+  // Gericht ist keine Antwort auf „plan mir die Woche" — gemessen kam
+  // genau das heraus: 1 Gericht von 7 verlangten, weil 19 Kandidaten an
+  // 20 Minuten und 2 € scheiterten.
+  const stufen = lockerungsStufen(maxMinutes, maxPricePerServing);
+  let picks: AdvisorPick[] = [];
+  let genutzteStufe = stufen[0];
 
-  // Lieber ein Vorschlag über Budget als gar keiner: Eine leere Woche sagt
-  // dem Nutzer nur „nein", ein zu teurer sagt ihm, was es kosten würde —
-  // und er kann das Budget bewusst anheben oder ablehnen.
-  let budgetRelaxed = false;
-  if (picks.length === 0 && maxPricePerServing !== undefined) {
-    picks = waehlen(undefined);
-    budgetRelaxed = picks.length > 0;
+  for (const stufe of stufen) {
+    picks = waehlen(stufe);
+    genutzteStufe = stufe;
+    if (mahlzeiten(picks) >= meals) break;
   }
+
+  // Nur melden, was sich gegenüber dem Gewünschten wirklich geändert hat.
+  const relaxed =
+    genutzteStufe.minutes !== maxMinutes || genutzteStufe.budget !== maxPricePerServing
+      ? { minutes: genutzteStufe.minutes, budget: genutzteStufe.budget }
+      : undefined;
 
   // ── Schritt 4: was die Woche wirklich kostet ───────────────────────
   //
@@ -651,7 +699,7 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
   if (preise && picks.length > 0) {
     try {
       const liste = await buildShoppingList(
-        picks.map((p) => scaleRecipe(p.recipe, servings)),
+        picks.map((p) => p.recipe),
         preise,
         { pantry },
       );
@@ -663,18 +711,21 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
     }
   }
 
-  // Kandidaten, die es bis zur Bewertung geschafft haben, dort aber am
-  // Budget gescheitert sind, gehören auch in die Rechenschaft.
-  if (maxPricePerServing !== undefined && !budgetRelaxed) {
-    for (const k of geholt) {
-      if (picks.some((p) => p.hit.id === k.hit.id)) continue;
-      const p = preisJePortion.get(k.hit.id);
-      if (p && p.price > maxPricePerServing) {
-        filtered.push({
-          title: k.imported.recipe.title,
-          reason: `${p.price.toFixed(2).replace('.', ',')} € je Portion`,
-        });
-      }
+  // Kandidaten, die es bis zur Bewertung geschafft haben, dort aber an der
+  // tatsächlich genutzten Grenze gescheitert sind, gehören in die
+  // Rechenschaft.
+  for (const k of geholt) {
+    if (picks.some((p) => p.hit.id === k.hit.id)) continue;
+    const p = preisJePortion.get(k.hit.id);
+    const min = k.imported.totalMinutes;
+
+    if (genutzteStufe.budget !== undefined && p && p.price > genutzteStufe.budget) {
+      filtered.push({
+        title: k.imported.recipe.title,
+        reason: `${p.price.toFixed(2).replace('.', ',')} € je Mahlzeit`,
+      });
+    } else if (genutzteStufe.minutes !== undefined && min !== undefined && min > genutzteStufe.minutes) {
+      filtered.push({ title: k.imported.recipe.title, reason: `${min} Min` });
     }
   }
 
@@ -685,8 +736,14 @@ export async function adviseWeek(req: AdvisorRequest): Promise<AdvisorResult> {
     totalPrice,
     totalUtilization,
     filtered,
-    budgetRelaxed,
+    relaxed,
+    mealsCovered: mahlzeiten(picks),
   };
+}
+
+/** Wie viele Mahlzeiten eine Auswahl zusammen ergibt. */
+function mahlzeiten(picks: AdvisorPick[]): number {
+  return picks.reduce((n, p) => n + p.mealsCovered, 0);
 }
 
 /**
